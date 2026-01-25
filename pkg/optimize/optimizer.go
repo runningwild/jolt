@@ -43,12 +43,23 @@ func (o *Optimizer) FindKnee(s SearchParams) (analyze.Analysis, float64, error) 
 		}
 
 		fmt.Printf("Testing %s = %v... ", s.VarName, val)
-		res, err := o.engine.Run(params)
+		
+		// Progress callback
+		onProgress := func(p engine.Progress) {
+			fmt.Printf("\rTesting %s = %v... [%.1fs, IOPS: %.2f, err: %.2f%%]   ", 
+				s.VarName, val, p.Elapsed.Seconds(), p.IOPS, p.RelErr*100)
+		}
+
+		res, err := o.engine.Run(params, onProgress)
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			fmt.Printf("\nError: %v\n", err)
 			return analyze.Analysis{}, 0, err
 		}
 
+		// Clear progress line and print final
+		fmt.Print("\r\033[K") // Clear line
+		fmt.Printf("Testing %s = %v... ", s.VarName, val)
+		
 		p := analyze.Point{X: val, Y: res.IOPS}
 		points = append(points, p)
 		fmt.Printf("IOPS: %.2f (err: %.2f%%, dur: %v, %s)\n", p.Y, res.MetricConfidence*100, res.Duration.Round(time.Millisecond), res.TerminationReason)

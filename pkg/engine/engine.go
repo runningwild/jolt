@@ -25,7 +25,7 @@ func New() *Engine {
 }
 
 // Run executes a workload based on the provided params.
-func (e *Engine) Run(params Params) (*Result, error) {
+func (e *Engine) Run(params Params, onProgress func(Progress)) (*Result, error) {
 	if params.BlockSize <= 0 {
 		return nil, fmt.Errorf("invalid block size: %d", params.BlockSize)
 	}
@@ -95,6 +95,14 @@ func (e *Engine) Run(params Params) (*Result, error) {
 					
 					if mean > 0 {
 						finalRelErr = stdErr / mean
+						
+						if onProgress != nil {
+							onProgress(Progress{
+								Elapsed: elapsed,
+								IOPS:    mean,
+								RelErr:  finalRelErr,
+							})
+						}
 						
 						// If specified error target is met
 						if params.ErrorTarget > 0 {

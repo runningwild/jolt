@@ -29,3 +29,10 @@ type Params struct {
 	MaxRuntime time.Duration // Maximum time to run the test
 	ErrorTarget float64      // Target standard error / mean (e.g. 0.01 for 1%)
 }
+
+// Progress reports intermediate status of a running test point.
+type Progress struct {
+	Elapsed time.Duration
+	IOPS    float64
+	RelErr  float64
+}

@@ -31,7 +31,20 @@ func TestEngineRun(t *testing.T) {
 		Runtime:    100 * time.Millisecond,
 	}
 
-	result, err := eng.Run(params)
+	// Update params to match new struct
+	engParams := Params{
+		Path:        tmpFile.Name(),
+		BlockSize:   4096,
+		Direct:      false,
+		Write:       false,
+		Rand:        true,
+		Workers:     2,
+		MinRuntime:  100 * time.Millisecond,
+		MaxRuntime:  500 * time.Millisecond,
+		ErrorTarget: 0.1,
+	}
+
+	result, err := eng.Run(engParams, nil)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
