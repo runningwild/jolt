@@ -12,11 +12,11 @@ settings:
 
 search:
   - variable: block_size
-    values: [2048, 4096]
+    values: [1024, 2048, 4096, 8192]
   - variable: queue_depth
-    range: [2, 64]
+    range: [1, 64]
   - variable: workers
-    range: [2, 64]
+    values: [64]
 
 objectives:
   - type: maximize

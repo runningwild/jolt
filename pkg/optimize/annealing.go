@@ -12,9 +12,10 @@ import (
 )
 
 type AnnealingOptimizer struct {
-	eng *engine.Engine
-	cfg *config.Config
-	rnd *rand.Rand
+	eng          *engine.Engine
+	cfg          *config.Config
+	rnd          *rand.Rand
+	initialScore float64
 }
 
 func NewAnnealing(eng *engine.Engine, cfg *config.Config) *AnnealingOptimizer {
@@ -35,7 +36,13 @@ func (ao *AnnealingOptimizer) Optimize() (State, engine.Result, error) {
 	if err != nil {
 		return nil, engine.Result{}, err
 	}
-	currentScore, reason := ao.calculateScore(currentRes)
+	
+	// Establish normalization baseline from first measurement
+	rawScore, reason := ao.calculateScore(currentRes)
+	ao.initialScore = math.Abs(rawScore)
+	if ao.initialScore < 1 { ao.initialScore = 1 } // avoid div by zero
+	
+	currentScore := (rawScore / ao.initialScore) * 1000.0
 
 	best := current
 	bestRes := currentRes
@@ -47,8 +54,8 @@ func (ao *AnnealingOptimizer) Optimize() (State, engine.Result, error) {
 	minTemp := ao.cfg.Settings.MinTemp
 	stepsPerTemp := ao.cfg.Settings.StepsPerTemp
 	
-	fmt.Printf("Initial State: %v, Score: %.2f (IOPS: %.0f), Temp: %.1f %s\n", 
-		current, currentScore, currentRes.IOPS, temp, reason)
+	fmt.Printf("Initial State: %v, Score: %.2f (%s), Temp: %.1f %s\n", 
+		current, currentScore, ao.formatMetrics(currentRes), temp, reason)
 
 	step := 0
 	for temp > minTemp {
@@ -62,7 +69,8 @@ func (ao *AnnealingOptimizer) Optimize() (State, engine.Result, error) {
 			if err != nil {
 				return nil, engine.Result{}, fmt.Errorf("evaluation failed at state %v: %w", neighbor, err)
 			}
-			score, reason := ao.calculateScore(res)
+			raw, reason := ao.calculateScore(res)
+			score := (raw / ao.initialScore) * 1000.0
 
 			// 4. Acceptance Probability
 			delta := score - currentScore
@@ -204,7 +212,6 @@ func (ao *AnnealingOptimizer) calculateScore(res engine.Result) (float64, string
 			passed := true
 			limitVal := parseLimit(obj.Limit)
 			
-			var actual float64
 			var actualDur time.Duration
 
 			switch obj.Metric {
@@ -214,22 +221,30 @@ func (ao *AnnealingOptimizer) calculateScore(res engine.Result) (float64, string
 			case "p50_latency":
 				actualDur = res.P50Latency
 				if res.P50Latency > limitVal { passed = false }
+			case "p95_latency":
+				// We don't have P95 in Result yet, using P99 as fallback
+				actualDur = res.P99Latency 
+				if res.P99Latency > limitVal { passed = false }
 			}
 			
 			if !passed {
 				return -1e9, fmt.Sprintf("Constraint Failed: %s (%v > %s)", obj.Metric, actualDur, obj.Limit)
 			}
-			_ = actual // silence unused
 		}
 	}
 
-	// 2. Add Objective Score
+	// 2. Add Objective Score (Scaled to similar magnitudes)
 	for _, obj := range ao.cfg.Objectives {
 		val := 0.0
 		switch obj.Metric {
-		case "iops": val = res.IOPS
-		case "throughput": val = res.Throughput
-		case "p99_latency": val = -float64(res.P99Latency)
+		case "iops": 
+			val = res.IOPS
+		case "throughput": 
+			val = res.Throughput / 1024 / 1024 // Use MB/s
+		case "p99_latency": 
+			val = -float64(res.P99Latency.Seconds() * 1000) // Use -ms (lower is better)
+		case "p50_latency":
+			val = -float64(res.P50Latency.Seconds() * 1000)
 		}
 
 		if obj.Type == "maximize" {
