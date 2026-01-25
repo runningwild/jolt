@@ -3,11 +3,13 @@ package engine
 import (
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"os"
 	"runtime"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -30,23 +32,107 @@ func (e *Engine) Run(params Params) (*Result, error) {
 
 	var wg sync.WaitGroup
 	results := make(chan workerResult, params.Workers)
+	done := make(chan struct{})
+	
+	// Atomic counter for live monitoring
+	var opsCounter int64
+
+	// Create token bucket for Global Queue Depth
+	qd := params.QueueDepth
+	if qd <= 0 {
+		qd = params.Workers
+	}
+	tokens := make(chan struct{}, qd)
+	for i := 0; i < qd; i++ {
+		tokens <- struct{}{}
+	}
+
 	start := time.Now()
 
 	for i := 0; i < params.Workers; i++ {
 		wg.Add(1)
 		go func(id int) {
-			runtime.LockOSThread() // Ensure we stay on this thread for consistent I/O
-			defer runtime.UnlockOSThread() // Good practice, though goroutine exits anyway
+			runtime.LockOSThread()
+			defer runtime.UnlockOSThread()
 			defer wg.Done()
-			results <- e.runWorker(id, params)
+			results <- e.runWorker(id, params, tokens, done, &opsCounter)
 		}(i)
 	}
 
+	// Monitoring Loop
+	monitorTicker := time.NewTicker(100 * time.Millisecond)
+	defer monitorTicker.Stop()
+
+	var iopsSamples []float64
+	var lastOps int64
+	var lastTime = start
+
+	for {
+		select {
+		case <-monitorTicker.C:
+			now := time.Now()
+			elapsed := now.Sub(start)
+			
+			currOps := atomic.LoadInt64(&opsCounter)
+			deltaOps := currOps - lastOps
+			deltaTime := now.Sub(lastTime).Seconds()
+			
+			if deltaTime > 0 {
+				sample := float64(deltaOps) / deltaTime
+				iopsSamples = append(iopsSamples, sample)
+			}
+			
+			lastOps = currOps
+			lastTime = now
+
+			// Check termination conditions
+			if elapsed > params.MinRuntime {
+				// Calculate stats
+				if len(iopsSamples) > 5 {
+					mean, stdErr := calculateStats(iopsSamples)
+					
+					// If specified confidence target is met
+					if params.ConfidenceTarget > 0 && mean > 0 {
+						relErr := stdErr / mean
+						if relErr <= params.ConfidenceTarget {
+							goto Finished
+						}
+					} else {
+						// If no confidence target, purely time-based (legacy behavior fallback logic if MaxRuntime not set?)
+						// But we assume MaxRuntime is set or we default to it.
+					}
+				}
+			}
+
+			if params.MaxRuntime > 0 && elapsed >= params.MaxRuntime {
+				goto Finished
+			}
+		}
+	}
+
+Finished:
+	close(done)
 	wg.Wait()
 	close(results)
 
 	duration := time.Since(start)
 	return e.aggregate(results, duration), nil
+}
+
+func calculateStats(samples []float64) (mean float64, stdErr float64) {
+	sum := 0.0
+	for _, x := range samples {
+		sum += x
+	}
+	mean = sum / float64(len(samples))
+
+	variance := 0.0
+	for _, x := range samples {
+		variance += (x - mean) * (x - mean)
+	}
+	stdDev := math.Sqrt(variance / float64(len(samples)))
+	stdErr = stdDev / math.Sqrt(float64(len(samples)))
+	return
 }
 
 type workerResult struct {
@@ -55,7 +141,7 @@ type workerResult struct {
 	err       error
 }
 
-func (e *Engine) runWorker(id int, params Params) workerResult {
+func (e *Engine) runWorker(id int, params Params, tokens chan struct{}, done chan struct{}, opsCounter *int64) workerResult {
 	flags := os.O_RDONLY
 	if params.Write {
 		flags = os.O_RDWR
@@ -70,17 +156,12 @@ func (e *Engine) runWorker(id int, params Params) workerResult {
 	}
 	defer f.Close()
 
-	// For O_DIRECT, we need aligned memory.
-	// Using Mmap to get page-aligned memory.
-	
 	alignedBlock, err := unix.Mmap(-1, 0, params.BlockSize, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_ANON|unix.MAP_PRIVATE)
 	if err != nil {
 		return workerResult{err: fmt.Errorf("failed to allocate aligned memory: %v", err)}
 	}
 	defer unix.Munmap(alignedBlock)
 
-	// Determine file size for random I/O
-	// os.Stat returns 0 for block devices, so we use Seek to find the end.
 	size, err := f.Seek(0, io.SeekEnd)
 	if err != nil {
 		return workerResult{err: err}
@@ -90,19 +171,23 @@ func (e *Engine) runWorker(id int, params Params) workerResult {
 	}
 	
 	maxBlocks := size / int64(params.BlockSize)
-
 	if maxBlocks <= 0 {
 		return workerResult{err: fmt.Errorf("file too small for block size")}
 	}
 
 	var ioCount int64
-	// Pre-allocate some space for latencies to reduce allocations
 	latencies := make([]time.Duration, 0, 10000)
-	stopTime := time.Now().Add(params.Runtime)
-
+	
 	r := rand.New(rand.NewSource(time.Now().UnixNano() + int64(id)))
 
-	for time.Now().Before(stopTime) {
+	for {
+		select {
+		case <-done:
+			return workerResult{ioCount: ioCount, latencies: latencies}
+		case <-tokens:
+			// Acquired token
+		}
+
 		offset := int64(0)
 		if params.Rand {
 			offset = r.Int63n(maxBlocks) * int64(params.BlockSize)
@@ -117,17 +202,20 @@ func (e *Engine) runWorker(id int, params Params) workerResult {
 		} else {
 			n, err = f.ReadAt(alignedBlock, offset)
 		}
+		
+		// Release token
+		tokens <- struct{}{}
+		
 		latencies = append(latencies, time.Since(ioStart))
-
+		
 		if err != nil && err != io.EOF {
 			return workerResult{err: err}
 		}
 		if n > 0 {
 			ioCount++
+			atomic.AddInt64(opsCounter, 1)
 		}
 	}
-
-	return workerResult{ioCount: ioCount, latencies: latencies}
 }
 
 func (e *Engine) aggregate(results chan workerResult, duration time.Duration) *Result {
@@ -136,7 +224,6 @@ func (e *Engine) aggregate(results chan workerResult, duration time.Duration) *R
 
 	for res := range results {
 		if res.err != nil {
-			// In a real tool, we'd handle errors better
 			continue
 		}
 		totalIOs += res.ioCount
@@ -153,7 +240,7 @@ func (e *Engine) aggregate(results chan workerResult, duration time.Duration) *R
 
 	return &Result{
 		IOPS:       float64(totalIOs) / duration.Seconds(),
-		Throughput: 0, // Calculate if needed later
+		Throughput: 0,
 		P50Latency: allLatencies[len(allLatencies)/2],
 		P99Latency: allLatencies[int(float64(len(allLatencies))*0.99)],
 		TotalIOs:   totalIOs,

@@ -13,7 +13,10 @@ import (
 
 func main() {
 	path := flag.String("path", "", "Path to device or file")
-	runtime := flag.Duration("runtime", 2*time.Second, "Runtime for each test point")
+	minRuntime := flag.Duration("min-runtime", 1*time.Second, "Minimum runtime for each test point")
+	maxRuntime := flag.Duration("max-runtime", 5*time.Second, "Maximum runtime for each test point")
+	confidence := flag.Float64("confidence", 0.05, "Target confidence interval (stdErr/mean), e.g., 0.05 for 5%")
+	
 	bs := flag.Int("bs", 4096, "Block size")
 	direct := flag.Bool("direct", true, "Use O_DIRECT")
 	write := flag.Bool("write", false, "Write workload (default is read)")
@@ -22,6 +25,13 @@ func main() {
 	minWorkers := flag.Int("min-workers", 1, "Minimum number of workers")
 	maxWorkers := flag.Int("max-workers", 32, "Maximum number of workers")
 	stepWorkers := flag.Int("step-workers", 1, "Step for workers")
+
+	queueDepth := flag.Int("queue-depth", 0, "Fixed Global Queue Depth (0 = num workers)")
+	varName := flag.String("var", "workers", "Variable to optimize: 'workers' or 'queuedepth'")
+	
+	minVal := flag.Int("min", 1, "Minimum value for the variable")
+	maxVal := flag.Int("max", 32, "Maximum value for the variable")
+	stepVal := flag.Int("step", 1, "Step value for the variable")
 
 	flag.Parse()
 
@@ -38,23 +48,42 @@ func main() {
 	}
 	opt := optimize.New(eng, detector)
 
-	searchParams := optimize.SearchParams{
-		BaseParams: engine.Params{
-			Path:      *path,
-			BlockSize: *bs,
-			Direct:    *direct,
-			Write:     *write,
-			Rand:      *randIO,
-			Runtime:   *runtime,
-		},
-		VarName: "workers",
-		Min:     float64(*minWorkers),
-		Max:     float64(*maxWorkers),
-		Step:    float64(*stepWorkers),
+	// Determine ranges based on legacy worker flags or new generic flags
+	start, end, step := float64(*minVal), float64(*maxVal), float64(*stepVal)
+	if *varName == "workers" {
+		// If using legacy worker flags and generic flags are default, use legacy
+		if *minWorkers != 1 || *maxWorkers != 32 || *stepWorkers != 1 {
+			start, end, step = float64(*minWorkers), float64(*maxWorkers), float64(*stepWorkers)
+		}
 	}
 
-	fmt.Printf("Starting jolt search on %s...\n", *path)
-	analysis, confidence, err := opt.FindKnee(searchParams)
+	searchParams := optimize.SearchParams{
+		BaseParams: engine.Params{
+			Path:             *path,
+			BlockSize:        *bs,
+			Direct:           *direct,
+			Write:            *write,
+			Rand:             *randIO,
+			Workers:          *maxWorkers, // Default workers if not varying workers
+			QueueDepth:       *queueDepth,
+			MinRuntime:       *minRuntime,
+			MaxRuntime:       *maxRuntime,
+			ConfidenceTarget: *confidence,
+		},
+		VarName: *varName,
+		Min:     start,
+		Max:     end,
+		Step:    step,
+	}
+	
+	// If varying workers, BaseParams.Workers is ignored/overwritten loop-by-loop.
+	// If varying queuedepth, BaseParams.Workers acts as the fixed pool size.
+	// We should ensure that if varying workers, the queue depth (if not set) scales or is fixed?
+	// Existing logic: if QueueDepth is 0, engine sets it to Workers.
+	// So if varying workers and QD=0, QD scales with Workers (natural behavior).
+	
+	fmt.Printf("Starting jolt search on %s varying %s...\n", *path, *varName)
+	analysis, confScore, err := opt.FindKnee(searchParams)
 	if err != nil {
 		fmt.Printf("Search error: %v\n", err)
 		os.Exit(1)
@@ -73,5 +102,5 @@ func main() {
 		fmt.Printf("Saturation Point:    Not detected in range\n")
 	}
 	
-	fmt.Printf("Confidence:          %.1f%%\n", confidence*100)
+	fmt.Printf("Confidence:          %.1f%%\n", confScore*100)
 }

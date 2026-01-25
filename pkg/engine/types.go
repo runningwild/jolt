@@ -21,7 +21,9 @@ type Params struct {
 	Direct     bool          // Use O_DIRECT
 	Write      bool          // True for write, false for read
 	Rand       bool          // True for random, false for sequential
-	Workers    int           // Number of concurrent workers
-	QueueDepth int           // Target queue depth per worker (if supported)
-	Runtime    time.Duration // How long to run the test
+	Workers    int           // Number of concurrent workers (goroutines)
+	QueueDepth int           // Global target queue depth (token bucket size)
+	MinRuntime time.Duration // Minimum time to run the test
+	MaxRuntime time.Duration // Maximum time to run the test
+	ConfidenceTarget float64 // Target standard error / mean (e.g. 0.01 for 1%)
 }
