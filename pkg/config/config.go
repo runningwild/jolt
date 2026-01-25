@@ -31,6 +31,7 @@ type Settings struct {
 	CoolingRate     float64 `yaml:"cooling_rate"`    // How fast to cool; typical values are 0.9 to 0.99
 	MinTemp         float64 `yaml:"min_temp"`        // Temperature at which optimization stops (e.g., 0.01)
 	StepsPerTemp    int     `yaml:"steps_per_temp"`   // Number of iterations to run at each temperature level (e.g., 1-10)
+	RestartInterval int     `yaml:"restart_interval"` // If > 0, reset to best state after this many steps without improvement
 }
 
 // Variable defines a parameter to optimize.

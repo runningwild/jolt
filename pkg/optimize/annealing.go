@@ -37,12 +37,15 @@ func (ao *AnnealingOptimizer) Optimize() (State, engine.Result, error) {
 		return nil, engine.Result{}, err
 	}
 	
-	// Establish normalization baseline from first measurement
 	rawScore, reason := ao.calculateScore(currentRes)
-	ao.initialScore = math.Abs(rawScore)
-	if ao.initialScore < 1 { ao.initialScore = 1 } // avoid div by zero
 	
-	currentScore := (rawScore / ao.initialScore) * 1000.0
+	// Only establish baseline if the first run was successful
+	if reason == "" {
+		ao.initialScore = math.Abs(rawScore)
+	}
+	if ao.initialScore < 1 { ao.initialScore = 1 }
+	
+	currentScore := ao.scaleScore(rawScore, reason)
 
 	best := current
 	bestRes := currentRes
@@ -53,15 +56,19 @@ func (ao *AnnealingOptimizer) Optimize() (State, engine.Result, error) {
 	coolingRate := ao.cfg.Settings.CoolingRate
 	minTemp := ao.cfg.Settings.MinTemp
 	stepsPerTemp := ao.cfg.Settings.StepsPerTemp
+	restartInterval := ao.cfg.Settings.RestartInterval
 	
 	fmt.Printf("Initial State: %v, Score: %.2f (%s), Temp: %.1f %s\n", 
 		current, currentScore, ao.formatMetrics(currentRes), temp, reason)
 
 	step := 0
+	stepsSinceImprovement := 0
 	for temp > minTemp {
 		for i := 0; i < stepsPerTemp; i++ {
 			step++
-			// 2. Neighbor Selection - pass current temperature ratio
+			stepsSinceImprovement++
+
+			// 2. Neighbor Selection
 			neighbor := ao.neighbor(current, temp/ao.cfg.Settings.InitialTemp)
 			
 			// 3. Evaluation
@@ -70,7 +77,15 @@ func (ao *AnnealingOptimizer) Optimize() (State, engine.Result, error) {
 				return nil, engine.Result{}, fmt.Errorf("evaluation failed at state %v: %w", neighbor, err)
 			}
 			raw, reason := ao.calculateScore(res)
-			score := (raw / ao.initialScore) * 1000.0
+			
+			// If we didn't have a baseline yet and this run is successful, establish it now
+			if ao.initialScore <= 1 && reason == "" {
+				ao.initialScore = math.Abs(raw)
+				if ao.initialScore < 1 { ao.initialScore = 1 }
+				currentScore = ao.scaleScore(rawScore, "")
+			}
+
+			score := ao.scaleScore(raw, reason)
 
 			// 4. Acceptance Probability
 			delta := score - currentScore
@@ -98,6 +113,7 @@ func (ao *AnnealingOptimizer) Optimize() (State, engine.Result, error) {
 					bestScore = score
 					bestRes = res
 					status = "NEW BEST"
+					stepsSinceImprovement = 0
 				}
 			}
 
@@ -107,6 +123,15 @@ func (ao *AnnealingOptimizer) Optimize() (State, engine.Result, error) {
 
 			fmt.Printf("[Step %3d] T=%7.2f %v => Score: %8.2f (%s) [%s]\n", 
 				step, temp, neighbor, score, ao.formatMetrics(res), status)
+
+			// Elitist Restart: if we haven't improved in a while, jump back to best
+			if restartInterval > 0 && stepsSinceImprovement >= restartInterval {
+				current = best
+				currentScore = bestScore
+				currentRes = bestRes
+				stepsSinceImprovement = 0
+				fmt.Printf("--- Restarting from Best State: %v ---\n", best)
+			}
 		}
 
 		temp *= coolingRate
@@ -204,6 +229,13 @@ func (ao *AnnealingOptimizer) evaluate(s State) (engine.Result, error) {
 	return *res, nil
 }
 
+func (ao *AnnealingOptimizer) scaleScore(raw float64, reason string) float64 {
+	if reason != "" {
+		return -1000.0 // Consistent penalty for failures
+	}
+	return (raw / ao.initialScore) * 1000.0
+}
+
 func (ao *AnnealingOptimizer) calculateScore(res engine.Result) (float64, string) {
 	score := 0.0
 
@@ -229,7 +261,7 @@ func (ao *AnnealingOptimizer) calculateScore(res engine.Result) (float64, string
 			}
 			
 			if !passed {
-				return -1e9, fmt.Sprintf("Constraint Failed: %s (%v > %s)", obj.Metric, actualDur, obj.Limit)
+				return 0, fmt.Sprintf("Constraint Failed: %s (%v > %s)", obj.Metric, actualDur, obj.Limit)
 			}
 		}
 	}

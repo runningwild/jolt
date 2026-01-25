@@ -31,10 +31,12 @@ func (e *UringEngine) Run(params Params) (*Result, error) {
 	if numWorkers <= 0 {
 		numWorkers = 1
 	}
-	qdPerWorker := params.QueueDepth / numWorkers
-	if qdPerWorker <= 0 {
-		qdPerWorker = 1
+	if numWorkers > params.QueueDepth {
+		numWorkers = params.QueueDepth
 	}
+
+	qdPerWorker := params.QueueDepth / numWorkers
+	remainder := params.QueueDepth % numWorkers
 
 	var wg sync.WaitGroup
 	done := make(chan struct{})
@@ -44,11 +46,15 @@ func (e *UringEngine) Run(params Params) (*Result, error) {
 	start := time.Now()
 
 	for i := 0; i < numWorkers; i++ {
+		workerQD := qdPerWorker
+		if i < remainder {
+			workerQD++
+		}
 		wg.Add(1)
-		go func(id int) {
+		go func(id int, qd int) {
 			defer wg.Done()
-			results <- e.runUringWorker(id, params, qdPerWorker, done, &opsCounter)
-		}(i)
+			results <- e.runUringWorker(id, params, qd, done, &opsCounter)
+		}(i, workerQD)
 	}
 
 	monitorTicker := time.NewTicker(100 * time.Millisecond)
@@ -157,24 +163,36 @@ func (e *UringEngine) runUringWorker(id int, params Params, qd int, done chan st
 	}
 	
 	maxBlocks := size / int64(params.BlockSize)
+	if maxBlocks <= 0 {
+		return workerResult{err: fmt.Errorf("file too small for block size")}
+	}
+
 	r := rand.New(rand.NewSource(time.Now().UnixNano() + int64(id)))
 
 	var ioCount int64
 	latencies := make([]time.Duration, 0, 10000)
 
+	freeSlots := make([]int, qd)
+	for i := 0; i < qd; i++ {
+		freeSlots[i] = i
+	}
+	nextFreeIdx := qd
+	
 	startTimes := make([]time.Time, qd)
 	inFlight := 0
+	lastOffset := r.Int63n(maxBlocks) * int64(params.BlockSize)
 
 	for {
-		queued := 0
-		for inFlight < qd {
-			idx := inFlight 
+		for inFlight < qd && nextFreeIdx > 0 {
+			nextFreeIdx--
+			slotIdx := freeSlots[nextFreeIdx]
 
 			offset := int64(0)
 			if params.Rand {
 				offset = r.Int63n(maxBlocks) * int64(params.BlockSize)
 			} else {
-				offset = (r.Int63n(maxBlocks)) * int64(params.BlockSize)
+				offset = lastOffset
+				lastOffset = (lastOffset + int64(params.BlockSize)) % size
 			}
 
 			isRead := true
@@ -184,8 +202,7 @@ func (e *UringEngine) runUringWorker(id int, params Params, qd int, done chan st
 				}
 			}
 
-			blockBuf := alignedBlock[idx*params.BlockSize : (idx+1)*params.BlockSize]
-			
+			blockBuf := alignedBlock[slotIdx*params.BlockSize : (slotIdx+1)*params.BlockSize]
 			var op uring.Operation
 			if isRead {
 				op = uring.Read(f.Fd(), blockBuf, uint64(offset))
@@ -193,30 +210,19 @@ func (e *UringEngine) runUringWorker(id int, params Params, qd int, done chan st
 				op = uring.Write(f.Fd(), blockBuf, uint64(offset))
 			}
 			
-			err := ring.QueueSQE(op, 0, uint64(idx))
+			err := ring.QueueSQE(op, 0, uint64(slotIdx))
 			if err != nil {
+				freeSlots[nextFreeIdx] = slotIdx
+				nextFreeIdx++
 				break
 			}
-			startTimes[idx] = time.Now()
+			startTimes[slotIdx] = time.Now()
 			inFlight++
-			queued++
-		}
-
-		if queued > 0 {
-			for {
-				_, err := ring.Submit()
-				if err == nil || !isEINTR(err) {
-					if err != nil {
-						return workerResult{err: err}
-					}
-					break
-				}
-			}
 		}
 
 		var cqe *uring.CQEvent
 		for {
-			cqe, err = ring.WaitCQEvents(1)
+			cqe, err = ring.SubmitAndWaitCQEvents(1)
 			if err == nil || !isEINTR(err) {
 				break
 			}
@@ -226,17 +232,19 @@ func (e *UringEngine) runUringWorker(id int, params Params, qd int, done chan st
 		}
 
 		for cqe != nil {
-			idx := int(cqe.UserData)
+			slotIdx := int(cqe.UserData)
 			if cqe.Res < 0 {
 				return workerResult{err: syscall.Errno(-cqe.Res)}
 			}
 			
-			latencies = append(latencies, time.Since(startTimes[idx]))
+			latencies = append(latencies, time.Since(startTimes[slotIdx]))
 			ioCount++
 			atomic.AddInt64(opsCounter, 1)
 			inFlight--
+			
+			freeSlots[nextFreeIdx] = slotIdx
+			nextFreeIdx++
 			ring.SeenCQE(cqe)
-
 			cqe, _ = ring.PeekCQE()
 		}
 
@@ -252,12 +260,9 @@ func isEINTR(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, syscall.EINTR) {
-		return true
-	}
-	var sysErr *os.SyscallError
-	if errors.As(err, &sysErr) {
-		return sysErr.Err == syscall.EINTR
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		return errno == syscall.EINTR
 	}
 	return false
 }
