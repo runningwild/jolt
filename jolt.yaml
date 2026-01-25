@@ -1,0 +1,21 @@
+target: test_data
+settings:
+  direct: false
+  min_runtime: 100ms
+  max_runtime: 2s
+  error_target: 0.05
+
+search:
+  - variable: block_size
+    values: [4096, 8192, 16384, 32768, 65536]
+  - variable: queue_depth
+    range: [1, 64]
+  - variable: workers
+    range: [1, 32]
+
+objectives:
+  - type: maximize
+    metric: iops
+  - type: constraint
+    metric: p99_latency
+    limit: 10ms

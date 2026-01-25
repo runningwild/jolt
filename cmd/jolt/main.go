@@ -7,11 +7,18 @@ import (
 	"time"
 
 	"github.com/runningwild/jolt/pkg/analyze"
+	"github.com/runningwild/jolt/pkg/config"
 	"github.com/runningwild/jolt/pkg/engine"
 	"github.com/runningwild/jolt/pkg/optimize"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "optimize" {
+		runOptimizer()
+		return
+	}
+
+	// Legacy Mode
 	path := flag.String("path", "", "Path to device or file")
 	minRuntime := flag.Duration("min-runtime", 1*time.Second, "Minimum runtime for each test point")
 	maxRuntime := flag.Duration("max-runtime", 0, "Maximum runtime for each test point (0 = unlimited)")
@@ -51,7 +58,6 @@ func main() {
 	// Determine ranges based on legacy worker flags or new generic flags
 	start, end, step := float64(*minVal), float64(*maxVal), float64(*stepVal)
 	if *varName == "workers" {
-		// If using legacy worker flags and generic flags are default, use legacy
 		if *minWorkers != 1 || *maxWorkers != 32 || *stepWorkers != 1 {
 			start, end, step = float64(*minWorkers), float64(*maxWorkers), float64(*stepWorkers)
 		}
@@ -64,23 +70,17 @@ func main() {
 			Direct:        *direct,
 			Write:         *write,
 			Rand:          *randIO,
-			Workers:       *maxWorkers, // Default workers if not varying workers
-			QueueDepth:       *queueDepth,
-			MinRuntime:       *minRuntime,
-			MaxRuntime:       *maxRuntime,
-			ErrorTarget:      *errorTarget,
+			Workers:       *maxWorkers,
+			QueueDepth:    *queueDepth,
+			MinRuntime:    *minRuntime,
+			MaxRuntime:    *maxRuntime,
+			ErrorTarget:   *errorTarget,
 		},
 		VarName: *varName,
 		Min:     start,
 		Max:     end,
 		Step:    step,
 	}
-	
-	// If varying workers, BaseParams.Workers is ignored/overwritten loop-by-loop.
-	// If varying queuedepth, BaseParams.Workers acts as the fixed pool size.
-	// We should ensure that if varying workers, the queue depth (if not set) scales or is fixed?
-	// Existing logic: if QueueDepth is 0, engine sets it to Workers.
-	// So if varying workers and QD=0, QD scales with Workers (natural behavior).
 	
 	fmt.Printf("Starting jolt search on %s varying %s...\n", *path, *varName)
 	analysis, confScore, err := opt.FindKnee(searchParams)
@@ -103,4 +103,31 @@ func main() {
 	}
 	
 	fmt.Printf("Curve Consistency:   %.1f%%\n", confScore*100)
+}
+
+func runOptimizer() {
+	optimizeCmd := flag.NewFlagSet("optimize", flag.ExitOnError)
+	configFile := optimizeCmd.String("config", "jolt.yaml", "Path to configuration file")
+	optimizeCmd.Parse(os.Args[2:])
+
+	cfg, err := config.Load(*configFile)
+	if err != nil {
+		fmt.Printf("Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Optimizing %s using Simulated Annealing...\n", cfg.Target)
+	
+	eng := engine.New()
+	optimizer := optimize.NewAnnealing(eng, cfg)
+	
+	bestState, bestRes, err := optimizer.Optimize()
+	if err != nil {
+		fmt.Printf("Optimization failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("\n>>> Optimization Complete <<<\n")
+	fmt.Printf("Best State: %v\n", bestState)
+	fmt.Printf("Metrics:    IOPS=%.0f, P99=%v\n", bestRes.IOPS, bestRes.P99Latency)
 }
