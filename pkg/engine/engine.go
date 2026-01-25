@@ -5,6 +5,7 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"runtime"
 	"sort"
 	"sync"
 	"syscall"
@@ -34,6 +35,8 @@ func (e *Engine) Run(params Params) (*Result, error) {
 	for i := 0; i < params.Workers; i++ {
 		wg.Add(1)
 		go func(id int) {
+			runtime.LockOSThread() // Ensure we stay on this thread for consistent I/O
+			defer runtime.UnlockOSThread() // Good practice, though goroutine exits anyway
 			defer wg.Done()
 			results <- e.runWorker(id, params)
 		}(i)
@@ -77,11 +80,15 @@ func (e *Engine) runWorker(id int, params Params) workerResult {
 	defer unix.Munmap(alignedBlock)
 
 	// Determine file size for random I/O
-	fi, err := f.Stat()
+	// os.Stat returns 0 for block devices, so we use Seek to find the end.
+	size, err := f.Seek(0, io.SeekEnd)
 	if err != nil {
 		return workerResult{err: err}
 	}
-	size := fi.Size()
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return workerResult{err: err}
+	}
+	
 	maxBlocks := size / int64(params.BlockSize)
 
 	if maxBlocks <= 0 {

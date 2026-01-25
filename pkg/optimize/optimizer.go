@@ -9,7 +9,7 @@ import (
 // SearchParams defines the bounds for finding the knee.
 type SearchParams struct {
 	BaseParams engine.Params
-	VarName    string  // "workers" or "queuedepth"
+	VarName    string // "workers" or "queuedepth"
 	Min        float64
 	Max        float64
 	Step       float64
@@ -17,17 +17,17 @@ type SearchParams struct {
 
 type Optimizer struct {
 	engine   *engine.Engine
-	detector analyze.KneeDetector
+	detector *analyze.Detector
 }
 
-func New(e *engine.Engine, d analyze.KneeDetector) *Optimizer {
+func New(e *engine.Engine, d *analyze.Detector) *Optimizer {
 	return &Optimizer{
 		engine:   e,
 		detector: d,
 	}
 }
 
-func (o *Optimizer) FindKnee(s SearchParams) (analyze.Point, error) {
+func (o *Optimizer) FindKnee(s SearchParams) (analyze.Analysis, float64, error) {
 	var points []analyze.Point
 
 	for val := s.Min; val <= s.Max; val += s.Step {
@@ -38,23 +38,26 @@ func (o *Optimizer) FindKnee(s SearchParams) (analyze.Point, error) {
 		case "queuedepth":
 			params.QueueDepth = int(val)
 		default:
-			return analyze.Point{}, fmt.Errorf("unknown variable: %s", s.VarName)
+			return analyze.Analysis{}, 0, fmt.Errorf("unknown variable: %s", s.VarName)
 		}
 
-		fmt.Printf("Testing %s = %v...\n", s.VarName, val)
+		fmt.Printf("Testing %s = %v... ", s.VarName, val)
 		res, err := o.engine.Run(params)
 		if err != nil {
-			return analyze.Point{}, err
+			fmt.Printf("Error: %v\n", err)
+			return analyze.Analysis{}, 0, err
 		}
 
 		p := analyze.Point{X: val, Y: res.IOPS}
 		points = append(points, p)
-		fmt.Printf("  -> IOPS: %.2f\n", p.Y)
+		fmt.Printf("IOPS: %.2f\n", p.Y)
 
-		if knee, found := o.detector.FindKnee(points); found {
-			return knee, nil
+		analysis := o.detector.Analyze(points)
+		// If we've found the saturation point, we can stop early
+		if analysis.SaturationPoint.X != 0 {
+			return analysis, analyze.CalculateConfidence(points), nil
 		}
 	}
 
-	return analyze.Point{}, fmt.Errorf("knee not found in range")
+	return o.detector.Analyze(points), analyze.CalculateConfidence(points), nil
 }
