@@ -6,7 +6,6 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -53,8 +52,6 @@ func (e *Engine) Run(params Params, onProgress func(Progress)) (*Result, error) 
 	for i := 0; i < params.Workers; i++ {
 		wg.Add(1)
 		go func(id int) {
-			runtime.LockOSThread()
-			defer runtime.UnlockOSThread()
 			defer wg.Done()
 			results <- e.runWorker(id, params, tokens, done, &opsCounter)
 		}(i)
