@@ -35,7 +35,7 @@ func (ao *AnnealingOptimizer) Optimize() (State, engine.Result, error) {
 	if err != nil {
 		return nil, engine.Result{}, err
 	}
-	currentScore := ao.calculateScore(currentRes)
+	currentScore, reason := ao.calculateScore(currentRes)
 
 	best := current
 	bestRes := currentRes
@@ -47,8 +47,8 @@ func (ao *AnnealingOptimizer) Optimize() (State, engine.Result, error) {
 	minTemp := ao.cfg.Settings.MinTemp
 	stepsPerTemp := ao.cfg.Settings.StepsPerTemp
 	
-	fmt.Printf("Initial State: %v, Score: %.2f (IOPS: %.0f), Temp: %.1f\n", 
-		current, currentScore, currentRes.IOPS, temp)
+	fmt.Printf("Initial State: %v, Score: %.2f (IOPS: %.0f), Temp: %.1f %s\n", 
+		current, currentScore, currentRes.IOPS, temp, reason)
 
 	step := 0
 	for temp > minTemp {
@@ -62,7 +62,7 @@ func (ao *AnnealingOptimizer) Optimize() (State, engine.Result, error) {
 			if err != nil {
 				return nil, engine.Result{}, fmt.Errorf("evaluation failed at state %v: %w", neighbor, err)
 			}
-			score := ao.calculateScore(res)
+			score, reason := ao.calculateScore(res)
 
 			// 4. Acceptance Probability
 			delta := score - currentScore
@@ -93,8 +93,12 @@ func (ao *AnnealingOptimizer) Optimize() (State, engine.Result, error) {
 				}
 			}
 
-			fmt.Printf("[Step %3d] T=%7.2f %v => Score: %8.2f (IOPS: %6.0f) [%s]\n", 
-				step, temp, neighbor, score, res.IOPS, status)
+			if reason != "" {
+				status = reason
+			}
+
+			fmt.Printf("[Step %3d] T=%7.2f %v => Score: %8.2f (%s) [%s]\n", 
+				step, temp, neighbor, score, ao.formatMetrics(res), status)
 		}
 
 		temp *= coolingRate
@@ -191,36 +195,41 @@ func (ao *AnnealingOptimizer) evaluate(s State) (engine.Result, error) {
 	return *res, nil
 }
 
-func (ao *AnnealingOptimizer) calculateScore(res engine.Result) float64 {
+func (ao *AnnealingOptimizer) calculateScore(res engine.Result) (float64, string) {
 	score := 0.0
 
 	// 1. Check Constraints (Hard penalties)
 	for _, obj := range ao.cfg.Objectives {
 		if obj.Type == "constraint" {
 			passed := true
-			limitVal := parseLimit(obj.Limit) // e.g., 10ms -> time.Duration
+			limitVal := parseLimit(obj.Limit)
 			
+			var actual float64
+			var actualDur time.Duration
+
 			switch obj.Metric {
 			case "p99_latency":
+				actualDur = res.P99Latency
 				if res.P99Latency > limitVal { passed = false }
 			case "p50_latency":
+				actualDur = res.P50Latency
 				if res.P50Latency > limitVal { passed = false }
 			}
 			
 			if !passed {
-				return -1e9 // Huge penalty
+				return -1e9, fmt.Sprintf("Constraint Failed: %s (%v > %s)", obj.Metric, actualDur, obj.Limit)
 			}
+			_ = actual // silence unused
 		}
 	}
 
 	// 2. Add Objective Score
-	// Assume single objective for now or sum normalized values
 	for _, obj := range ao.cfg.Objectives {
 		val := 0.0
 		switch obj.Metric {
 		case "iops": val = res.IOPS
 		case "throughput": val = res.Throughput
-		case "p99_latency": val = -float64(res.P99Latency) // Negate because lower is better
+		case "p99_latency": val = -float64(res.P99Latency)
 		}
 
 		if obj.Type == "maximize" {
@@ -230,7 +239,42 @@ func (ao *AnnealingOptimizer) calculateScore(res engine.Result) float64 {
 		}
 	}
 	
-	return score
+	return score, ""
+}
+
+func (ao *AnnealingOptimizer) formatMetrics(res engine.Result) string {
+	var parts []string
+	for _, obj := range ao.cfg.Objectives {
+		switch obj.Metric {
+		case "iops":
+			parts = append(parts, fmt.Sprintf("IOPS: %.0f", res.IOPS))
+		case "throughput":
+			parts = append(parts, fmt.Sprintf("BW: %.2f MB/s", res.Throughput/1024/1024))
+		case "p99_latency":
+			parts = append(parts, fmt.Sprintf("P99: %v", res.P99Latency))
+		case "p50_latency":
+			parts = append(parts, fmt.Sprintf("P50: %v", res.P50Latency))
+		}
+	}
+	if len(parts) == 0 {
+		return fmt.Sprintf("IOPS: %.0f", res.IOPS)
+	}
+
+	seen := make(map[string]bool)
+	var unique []string
+	for _, p := range parts {
+		if !seen[p] {
+			unique = append(unique, p)
+			seen[p] = true
+		}
+	}
+
+	result := ""
+	for i, p := range unique {
+		if i > 0 { result += ", " }
+		result += p
+	}
+	return result
 }
 
 func parseLimit(s string) time.Duration {

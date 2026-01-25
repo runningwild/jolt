@@ -136,6 +136,7 @@ Finished:
 	if err != nil {
 		return nil, err
 	}
+	res.Throughput = float64(res.TotalIOs*int64(params.BlockSize)) / duration.Seconds()
 	res.TerminationReason = reason
 	return res, nil
 }
