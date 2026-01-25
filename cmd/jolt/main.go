@@ -26,7 +26,7 @@ func main() {
 	
 	bs := flag.Int("bs", 4096, "Block size")
 	direct := flag.Bool("direct", true, "Use O_DIRECT")
-	write := flag.Bool("write", false, "Write workload (default is read)")
+	readPct := flag.Int("read-pct", 100, "Read percentage (0-100)")
 	randIO := flag.Bool("rand", true, "Random I/O (default is sequential)")
 	
 	minWorkers := flag.Int("min-workers", 1, "Minimum number of workers")
@@ -68,7 +68,7 @@ func main() {
 			Path:          *path,
 			BlockSize:     *bs,
 			Direct:        *direct,
-			Write:         *write,
+			ReadPct:       *readPct,
 			Rand:          *randIO,
 			Workers:       *maxWorkers,
 			QueueDepth:    *queueDepth,
@@ -117,6 +117,17 @@ func runOptimizer() {
 	}
 
 	fmt.Printf("Optimizing %s using Simulated Annealing...\n", cfg.Target)
+	mode := fmt.Sprintf("%d/%d Read/Write Mix", cfg.Settings.ReadPct, 100-cfg.Settings.ReadPct)
+	if cfg.Settings.ReadPct == 100 {
+		mode = "Pure Read"
+	} else if cfg.Settings.ReadPct == 0 {
+		mode = "Pure Write"
+	}
+	direct := "Buffered"
+	if cfg.Settings.Direct {
+		direct = "O_DIRECT"
+	}
+	fmt.Printf("Configuration: %s, %s, MinRuntime=%v\n", mode, direct, cfg.Settings.MinRuntime)
 	
 	eng := engine.New()
 	optimizer := optimize.NewAnnealing(eng, cfg)

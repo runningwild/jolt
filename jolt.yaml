@@ -1,15 +1,20 @@
-target: test_data
+target: /dev/nvme0n1p3
 settings:
-  direct: false
-  min_runtime: 100ms
-  max_runtime: 2s
+  direct: true
+  write: true # Set to true if you want to test Write performance (DESTRUCTIVE!)
+  rand: true    # Random I/O
+  min_runtime: 1s
+  max_runtime: 10s
   error_target: 0.05
+  initial_temp: 5000
+  cooling_rate: 0.99
+  steps_per_temp: 5
 
 search:
   - variable: block_size
-    values: [4096, 8192, 16384, 32768, 65536]
+    values: [1024, 2048, 4096, 8192]
   - variable: queue_depth
-    range: [1, 64]
+    range: [1, 128]
   - variable: workers
     range: [1, 32]
 
@@ -18,4 +23,4 @@ objectives:
     metric: iops
   - type: constraint
     metric: p99_latency
-    limit: 10ms
+    limit: 5ms

@@ -132,7 +132,10 @@ Finished:
 	close(results)
 
 	duration := time.Since(start)
-	res := e.aggregate(results, duration, finalRelErr)
+	res, err := e.aggregate(results, duration, finalRelErr)
+	if err != nil {
+		return nil, err
+	}
 	res.TerminationReason = reason
 	return res, nil
 }
@@ -161,7 +164,7 @@ type workerResult struct {
 
 func (e *Engine) runWorker(id int, params Params, tokens chan struct{}, done chan struct{}, opsCounter *int64) workerResult {
 	flags := os.O_RDONLY
-	if params.Write {
+	if params.ReadPct < 100 {
 		flags = os.O_RDWR
 	}
 	if params.Direct {
@@ -213,12 +216,20 @@ func (e *Engine) runWorker(id int, params Params, tokens chan struct{}, done cha
 			offset = (ioCount * int64(params.BlockSize)) % (maxBlocks * int64(params.BlockSize))
 		}
 
+		// Decide Read vs Write
+		isRead := true
+		if params.ReadPct < 100 {
+			if params.ReadPct == 0 || r.Intn(100) >= params.ReadPct {
+				isRead = false
+			}
+		}
+
 		ioStart := time.Now()
 		var n int
-		if params.Write {
-			n, err = f.WriteAt(alignedBlock, offset)
-		} else {
+		if isRead {
 			n, err = f.ReadAt(alignedBlock, offset)
+		} else {
+			n, err = f.WriteAt(alignedBlock, offset)
 		}
 		
 		// Release token
@@ -236,21 +247,28 @@ func (e *Engine) runWorker(id int, params Params, tokens chan struct{}, done cha
 	}
 }
 
-func (e *Engine) aggregate(results chan workerResult, duration time.Duration, relErr float64) *Result {
+func (e *Engine) aggregate(results chan workerResult, duration time.Duration, relErr float64) (*Result, error) {
 	var totalIOs int64
 	var allLatencies []time.Duration
+	var firstErr error
 
 	for res := range results {
 		if res.err != nil {
-			// In a real tool, we'd handle errors better
+			if firstErr == nil {
+				firstErr = res.err
+			}
 			continue
 		}
 		totalIOs += res.ioCount
 		allLatencies = append(allLatencies, res.latencies...)
 	}
 
+	if firstErr != nil {
+		return nil, firstErr
+	}
+
 	if len(allLatencies) == 0 {
-		return &Result{Duration: duration, MetricConfidence: relErr}
+		return &Result{Duration: duration, MetricConfidence: relErr}, nil
 	}
 
 	sort.Slice(allLatencies, func(i, j int) bool {
@@ -265,5 +283,5 @@ func (e *Engine) aggregate(results chan workerResult, duration time.Duration, re
 		TotalIOs:         totalIOs,
 		Duration:         duration,
 		MetricConfidence: relErr,
-	}
+	}, nil
 }

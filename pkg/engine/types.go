@@ -21,7 +21,7 @@ type Params struct {
 	Path       string        // Path to the device or file
 	BlockSize  int           // Size of each I/O in bytes
 	Direct     bool          // Use O_DIRECT
-	Write      bool          // True for write, false for read
+	ReadPct    int           // Percentage of operations that are reads (0-100)
 	Rand       bool          // True for random, false for sequential
 	Workers    int           // Number of concurrent workers (goroutines)
 	QueueDepth int           // Global target queue depth (token bucket size)

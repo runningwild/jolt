@@ -41,53 +41,61 @@ func (ao *AnnealingOptimizer) Optimize() (State, engine.Result, error) {
 	bestRes := currentRes
 	bestScore := currentScore
 
-	// Annealing Parameters
-	temp := 1.0
-	coolingRate := 0.95
-	minTemp := 0.01
+	// Annealing Parameters from config
+	temp := ao.cfg.Settings.InitialTemp
+	coolingRate := ao.cfg.Settings.CoolingRate
+	minTemp := ao.cfg.Settings.MinTemp
+	stepsPerTemp := ao.cfg.Settings.StepsPerTemp
 	
-	fmt.Printf("Initial State: %v, Score: %.2f (IOPS: %.0f)\n", current, currentScore, currentRes.IOPS)
+	fmt.Printf("Initial State: %v, Score: %.2f (IOPS: %.0f), Temp: %.1f\n", 
+		current, currentScore, currentRes.IOPS, temp)
 
 	step := 0
 	for temp > minTemp {
-		step++
-		// 2. Neighbor Selection
-		neighbor := ao.neighbor(current)
-		
-		// 3. Evaluation
-		res, err := ao.evaluate(neighbor)
-		if err != nil {
-			fmt.Printf("Evaluation failed: %v\n", err)
-			continue
-		}
-		score := ao.calculateScore(res)
-
-		// 4. Acceptance Probability
-		delta := score - currentScore
-		acceptance := 0.0
-		if delta > 0 {
-			acceptance = 1.0
-		} else {
-			acceptance = math.Exp(delta / temp) // delta is negative
-		}
-
-		status := "Rejected"
-		if acceptance > ao.rnd.Float64() {
-			current = neighbor
-			currentScore = score
-			currentRes = res
-			status = "Accepted"
+		for i := 0; i < stepsPerTemp; i++ {
+			step++
+			// 2. Neighbor Selection - pass current temperature ratio
+			neighbor := ao.neighbor(current, temp/ao.cfg.Settings.InitialTemp)
 			
-			if score > bestScore {
-				best = neighbor
-				bestScore = score
-				bestRes = res
-				status = "NEW BEST"
+			// 3. Evaluation
+			res, err := ao.evaluate(neighbor)
+			if err != nil {
+				return nil, engine.Result{}, fmt.Errorf("evaluation failed at state %v: %w", neighbor, err)
 			}
-		}
+			score := ao.calculateScore(res)
 
-		fmt.Printf("[Step %3d] T=%.3f %v => Score: %.2f (IOPS: %.0f) [%s]\n", 
-			step, temp, neighbor, score, res.IOPS, status)
+			// 4. Acceptance Probability
+			delta := score - currentScore
+			acceptance := 0.0
+			if delta > 0 {
+				acceptance = 1.0
+			} else {
+				exponent := delta / temp
+				if exponent < -700 {
+					acceptance = 0.0
+				} else {
+					acceptance = math.Exp(exponent)
+				}
+			}
+
+			status := "Rejected"
+			if acceptance > ao.rnd.Float64() {
+				current = neighbor
+				currentScore = score
+				currentRes = res
+				status = "Accepted"
+				
+				if score > bestScore {
+					best = neighbor
+					bestScore = score
+					bestRes = res
+					status = "NEW BEST"
+				}
+			}
+
+			fmt.Printf("[Step %3d] T=%7.2f %v => Score: %8.2f (IOPS: %6.0f) [%s]\n", 
+				step, temp, neighbor, score, res.IOPS, status)
+		}
 
 		temp *= coolingRate
 	}
@@ -110,7 +118,7 @@ func (ao *AnnealingOptimizer) randomState() State {
 	return s
 }
 
-func (ao *AnnealingOptimizer) neighbor(s State) State {
+func (ao *AnnealingOptimizer) neighbor(s State, tempRatio float64) State {
 	// Copy state
 	next := make(State)
 	for k, v := range s {
@@ -125,18 +133,21 @@ func (ao *AnnealingOptimizer) neighbor(s State) State {
 		// Pick random value from list
 		next[v.Name] = v.Values[ao.rnd.Intn(len(v.Values))]
 	} else {
-		// Perturb within range (small step or big jump?)
-		// For SA, usually small step.
-		step := v.Step
-		if step == 0 { step = 1 }
+		// Perturb within range
+		// Jump size scales with temperature ratio (1.0 at start, 0.0 at end)
+		span := v.Range[1] - v.Range[0]
 		
-		// 50% chance to go up or down
-		change := step
-		if ao.rnd.Intn(2) == 0 {
-			change = -step
+		maxJump := float64(span) * tempRatio
+		if maxJump < 1 {
+			maxJump = 1
 		}
 		
-		newVal := next[v.Name] + change
+		jump := int(ao.rnd.NormFloat64() * maxJump)
+		if jump == 0 {
+			if ao.rnd.Intn(2) == 0 { jump = 1 } else { jump = -1 }
+		}
+		
+		newVal := next[v.Name] + jump
 		if newVal < v.Range[0] { newVal = v.Range[0] }
 		if newVal > v.Range[1] { newVal = v.Range[1] }
 		next[v.Name] = newVal
@@ -149,7 +160,7 @@ func (ao *AnnealingOptimizer) evaluate(s State) (engine.Result, error) {
 	p := engine.Params{
 		Path:        ao.cfg.Target,
 		Direct:      ao.cfg.Settings.Direct,
-		Write:       ao.cfg.Settings.Write,
+		ReadPct:     ao.cfg.Settings.ReadPct,
 		Rand:        ao.cfg.Settings.Rand,
 		MinRuntime:  ao.cfg.Settings.MinRuntime,
 		MaxRuntime:  ao.cfg.Settings.MaxRuntime,
