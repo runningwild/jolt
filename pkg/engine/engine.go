@@ -24,7 +24,7 @@ func New() *Engine {
 }
 
 // Run executes a workload based on the provided params.
-func (e *Engine) Run(params Params, onProgress func(Progress)) (*Result, error) {
+func (e *Engine) Run(params Params) (*Result, error) {
 	if params.BlockSize <= 0 {
 		return nil, fmt.Errorf("invalid block size: %d", params.BlockSize)
 	}
@@ -84,33 +84,34 @@ func (e *Engine) Run(params Params, onProgress func(Progress)) (*Result, error) 
 			lastOps = currOps
 			lastTime = now
 
+			// Calculate intermediate stats
+			var mean, stdErr float64
+			if len(iopsSamples) > 0 {
+				mean, stdErr = calculateStats(iopsSamples)
+			}
+			
+			if mean > 0 {
+				finalRelErr = stdErr / mean
+			}
+
+			if params.Progress != nil {
+				params.Progress(Result{
+					IOPS:             mean,
+					MetricConfidence: finalRelErr,
+					Duration:         elapsed,
+					TotalIOs:         currOps,
+				})
+			}
+
 			// Check termination conditions
 			if elapsed > params.MinRuntime {
-				// Calculate stats
 				if len(iopsSamples) > 5 {
-					mean, stdErr := calculateStats(iopsSamples)
-					
 					if mean > 0 {
-						finalRelErr = stdErr / mean
-						
-						if onProgress != nil {
-							onProgress(Progress{
-								Elapsed: elapsed,
-								IOPS:    mean,
-								RelErr:  finalRelErr,
-							})
-						}
-						
-						// If specified error target is met
-						if params.ErrorTarget > 0 {
-							if finalRelErr <= params.ErrorTarget {
+						if params.ConfidenceTarget > 0 {
+							if finalRelErr <= params.ConfidenceTarget {
 								reason = "Converged"
 								goto Finished
 							}
-						} else {
-							// No error target, just run for MinRuntime
-							reason = "MinRuntimeReached"
-							goto Finished
 						}
 					}
 				}

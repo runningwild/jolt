@@ -15,7 +15,7 @@ func main() {
 	path := flag.String("path", "", "Path to device or file")
 	minRuntime := flag.Duration("min-runtime", 1*time.Second, "Minimum runtime for each test point")
 	maxRuntime := flag.Duration("max-runtime", 0, "Maximum runtime for each test point (0 = unlimited)")
-	errorTarget := flag.Float64("error", 0.05, "Target relative error (stdErr/mean), e.g., 0.05 for 5%")
+	confidence := flag.Float64("confidence", 0.05, "Target relative error (stdErr/mean), e.g., 0.05 for 5%")
 	
 	bs := flag.Int("bs", 4096, "Block size")
 	direct := flag.Bool("direct", true, "Use O_DIRECT")
@@ -65,10 +65,10 @@ func main() {
 			Write:         *write,
 			Rand:          *randIO,
 			Workers:       *maxWorkers, // Default workers if not varying workers
-			QueueDepth:    *queueDepth,
-			MinRuntime:    *minRuntime,
-			MaxRuntime:    *maxRuntime,
-			ErrorTarget:   *errorTarget,
+			QueueDepth:       *queueDepth,
+			MinRuntime:       *minRuntime,
+			MaxRuntime:       *maxRuntime,
+			ConfidenceTarget: *confidence,
 		},
 		VarName: *varName,
 		Min:     start,

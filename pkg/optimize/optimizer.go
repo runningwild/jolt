@@ -42,27 +42,26 @@ func (o *Optimizer) FindKnee(s SearchParams) (analyze.Analysis, float64, error) 
 			return analyze.Analysis{}, 0, fmt.Errorf("unknown variable: %s", s.VarName)
 		}
 
-		fmt.Printf("Testing %s = %v... ", s.VarName, val)
-		
-		// Progress callback
-		onProgress := func(p engine.Progress) {
-			fmt.Printf("\rTesting %s = %v... [%.1fs, IOPS: %.2f, err: %.2f%%]   ", 
-				s.VarName, val, p.Elapsed.Seconds(), p.IOPS, p.RelErr*100)
+		// Setup progress reporting
+		fmt.Printf("Testing %s = %v... ", s.VarName, val) // This line is not part of the original code, it's a new addition.
+		params.Progress = func(r engine.Result) {
+			// Update line in place
+			fmt.Printf("\rTesting %s = %v... IOPS: %.2f (conf: %.2f%%) [%v]   ", 
+				s.VarName, val, r.IOPS, r.MetricConfidence*100, r.Duration.Round(100*time.Millisecond))
 		}
 
-		res, err := o.engine.Run(params, onProgress)
+		res, err := o.engine.Run(params)
 		if err != nil {
 			fmt.Printf("\nError: %v\n", err)
 			return analyze.Analysis{}, 0, err
 		}
 
-		// Clear progress line and print final
-		fmt.Print("\r\033[K") // Clear line
-		fmt.Printf("Testing %s = %v... ", s.VarName, val)
-		
+		// Final print to lock in the line
+		fmt.Printf("\rTesting %s = %v... IOPS: %.2f (conf: %.2f%%) [%v]   \n", 
+			s.VarName, val, res.IOPS, res.MetricConfidence*100, res.Duration.Round(100*time.Millisecond))
+
 		p := analyze.Point{X: val, Y: res.IOPS}
 		points = append(points, p)
-		fmt.Printf("IOPS: %.2f (err: %.2f%%, dur: %v, %s)\n", p.Y, res.MetricConfidence*100, res.Duration.Round(time.Millisecond), res.TerminationReason)
 
 		analysis := o.detector.Analyze(points)
 		// If we've found the saturation point, we can stop early
