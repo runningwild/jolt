@@ -20,31 +20,21 @@ func TestEngineRun(t *testing.T) {
 	}
 	tmpFile.Close()
 
-	eng := New()
+	eng := New("sync")
 	params := Params{
-		Path:       tmpFile.Name(),
-		BlockSize:  4096,
-		Direct:     false, // O_DIRECT might not work on tmpfs
-		Write:      false,
-		Rand:       true,
-		Workers:    2,
-		Runtime:    100 * time.Millisecond,
-	}
-
-	// Update params to match new struct
-	engParams := Params{
+		EngineType:  "sync",
 		Path:        tmpFile.Name(),
 		BlockSize:   4096,
-		Direct:      false,
-		Write:       false,
+		Direct:      false, // O_DIRECT might not work on tmpfs
+		ReadPct:     100,   // Read-only
 		Rand:        true,
 		Workers:     2,
 		MinRuntime:  100 * time.Millisecond,
-		MaxRuntime:  500 * time.Millisecond,
+		MaxRuntime:  200 * time.Millisecond,
 		ErrorTarget: 0.1,
 	}
 
-	result, err := eng.Run(engParams, nil)
+	result, err := eng.Run(params)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
