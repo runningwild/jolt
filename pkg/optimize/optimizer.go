@@ -2,6 +2,7 @@ package optimize
 
 import (
 	"fmt"
+	"time"
 	"github.com/runningwild/jolt/pkg/analyze"
 	"github.com/runningwild/jolt/pkg/engine"
 )
@@ -50,7 +51,7 @@ func (o *Optimizer) FindKnee(s SearchParams) (analyze.Analysis, float64, error) 
 
 		p := analyze.Point{X: val, Y: res.IOPS}
 		points = append(points, p)
-		fmt.Printf("IOPS: %.2f (conf: %.2f%%)\n", p.Y, res.MetricConfidence*100)
+		fmt.Printf("IOPS: %.2f (err: %.2f%%, dur: %v, %s)\n", p.Y, res.MetricConfidence*100, res.Duration.Round(time.Millisecond), res.TerminationReason)
 
 		analysis := o.detector.Analyze(points)
 		// If we've found the saturation point, we can stop early

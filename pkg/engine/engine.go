@@ -48,6 +48,7 @@ func (e *Engine) Run(params Params) (*Result, error) {
 	}
 
 	start := time.Now()
+	var reason string
 
 	for i := 0; i < params.Workers; i++ {
 		wg.Add(1)
@@ -95,17 +96,23 @@ func (e *Engine) Run(params Params) (*Result, error) {
 					if mean > 0 {
 						finalRelErr = stdErr / mean
 						
-						// If specified confidence target is met
-						if params.ConfidenceTarget > 0 {
-							if finalRelErr <= params.ConfidenceTarget {
+						// If specified error target is met
+						if params.ErrorTarget > 0 {
+							if finalRelErr <= params.ErrorTarget {
+								reason = "Converged"
 								goto Finished
 							}
+						} else {
+							// No error target, just run for MinRuntime
+							reason = "MinRuntimeReached"
+							goto Finished
 						}
 					}
 				}
 			}
 
 			if params.MaxRuntime > 0 && elapsed >= params.MaxRuntime {
+				reason = "Timeout"
 				goto Finished
 			}
 		}
@@ -117,7 +124,9 @@ Finished:
 	close(results)
 
 	duration := time.Since(start)
-	return e.aggregate(results, duration, finalRelErr), nil
+	res := e.aggregate(results, duration, finalRelErr)
+	res.TerminationReason = reason
+	return res, nil
 }
 
 func calculateStats(samples []float64) (mean float64, stdErr float64) {

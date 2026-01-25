@@ -13,6 +13,7 @@ type Result struct {
 	TotalIOs         int64
 	Duration         time.Duration
 	MetricConfidence float64 // The achieved StdErr/Mean (lower is better)
+	TerminationReason string // Why the test finished (Timeout, Converged, etc.)
 }
 
 // Params defines the parameters for an I/O workload.
@@ -26,5 +27,5 @@ type Params struct {
 	QueueDepth int           // Global target queue depth (token bucket size)
 	MinRuntime time.Duration // Minimum time to run the test
 	MaxRuntime time.Duration // Maximum time to run the test
-	ConfidenceTarget float64 // Target standard error / mean (e.g. 0.01 for 1%)
+	ErrorTarget float64      // Target standard error / mean (e.g. 0.01 for 1%)
 }

@@ -14,8 +14,8 @@ import (
 func main() {
 	path := flag.String("path", "", "Path to device or file")
 	minRuntime := flag.Duration("min-runtime", 1*time.Second, "Minimum runtime for each test point")
-	maxRuntime := flag.Duration("max-runtime", 5*time.Second, "Maximum runtime for each test point")
-	confidence := flag.Float64("confidence", 0.05, "Target confidence interval (stdErr/mean), e.g., 0.05 for 5%")
+	maxRuntime := flag.Duration("max-runtime", 0, "Maximum runtime for each test point (0 = unlimited)")
+	errorTarget := flag.Float64("error", 0.05, "Target relative error (stdErr/mean), e.g., 0.05 for 5%")
 	
 	bs := flag.Int("bs", 4096, "Block size")
 	direct := flag.Bool("direct", true, "Use O_DIRECT")
@@ -59,16 +59,16 @@ func main() {
 
 	searchParams := optimize.SearchParams{
 		BaseParams: engine.Params{
-			Path:             *path,
-			BlockSize:        *bs,
-			Direct:           *direct,
-			Write:            *write,
-			Rand:             *randIO,
-			Workers:          *maxWorkers, // Default workers if not varying workers
-			QueueDepth:       *queueDepth,
-			MinRuntime:       *minRuntime,
-			MaxRuntime:       *maxRuntime,
-			ConfidenceTarget: *confidence,
+			Path:          *path,
+			BlockSize:     *bs,
+			Direct:        *direct,
+			Write:         *write,
+			Rand:          *randIO,
+			Workers:       *maxWorkers, // Default workers if not varying workers
+			QueueDepth:    *queueDepth,
+			MinRuntime:    *minRuntime,
+			MaxRuntime:    *maxRuntime,
+			ErrorTarget:   *errorTarget,
 		},
 		VarName: *varName,
 		Min:     start,
