@@ -15,16 +15,26 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Engine manages the execution of I/O workloads.
-type Engine struct {
+// SyncEngine implements Engine using standard synchronous syscalls and goroutines.
+type SyncEngine struct {
 }
 
-func New() *Engine {
-	return &Engine{}
+func NewSync() *SyncEngine {
+	return &SyncEngine{}
+}
+
+// New returns an Engine of the requested type.
+func New(engineType string) Engine {
+	switch engineType {
+	case "uring":
+		return NewUring()
+	default:
+		return NewSync()
+	}
 }
 
 // Run executes a workload based on the provided params.
-func (e *Engine) Run(params Params) (*Result, error) {
+func (e *SyncEngine) Run(params Params) (*Result, error) {
 	if params.BlockSize <= 0 {
 		return nil, fmt.Errorf("invalid block size: %d", params.BlockSize)
 	}
@@ -106,17 +116,15 @@ func (e *Engine) Run(params Params) (*Result, error) {
 			// Check termination conditions
 			if elapsed > params.MinRuntime {
 				if len(iopsSamples) > 5 {
-										if mean > 0 {
-											// finalRelErr already calculated above
-											
-											// If specified confidence target is met
-											if params.ErrorTarget > 0 {
-												if finalRelErr <= params.ErrorTarget {
-													reason = "Converged"
-													goto Finished
-												}
-											}
-										}				}
+					if mean > 0 {
+						if params.ErrorTarget > 0 {
+							if finalRelErr <= params.ErrorTarget {
+								reason = "Converged"
+								goto Finished
+							}
+						}
+					}
+				}
 			}
 
 			if params.MaxRuntime > 0 && elapsed >= params.MaxRuntime {
@@ -163,7 +171,7 @@ type workerResult struct {
 	err       error
 }
 
-func (e *Engine) runWorker(id int, params Params, tokens chan struct{}, done chan struct{}, opsCounter *int64) workerResult {
+func (e *SyncEngine) runWorker(id int, params Params, tokens chan struct{}, done chan struct{}, opsCounter *int64) workerResult {
 	flags := os.O_RDONLY
 	if params.ReadPct < 100 {
 		flags = os.O_RDWR
@@ -248,7 +256,7 @@ func (e *Engine) runWorker(id int, params Params, tokens chan struct{}, done cha
 	}
 }
 
-func (e *Engine) aggregate(results chan workerResult, duration time.Duration, relErr float64) (*Result, error) {
+func (e *SyncEngine) aggregate(results chan workerResult, duration time.Duration, relErr float64) (*Result, error) {
 	var totalIOs int64
 	var allLatencies []time.Duration
 	var firstErr error

@@ -16,14 +16,20 @@ type Result struct {
 	TerminationReason string // Why the test finished (Timeout, Converged, etc.)
 }
 
+// Engine defines the interface for different I/O execution strategies.
+type Engine interface {
+	Run(params Params) (*Result, error)
+}
+
 // Params defines the parameters for an I/O workload.
 type Params struct {
+	EngineType string        // "sync" or "uring"
 	Path       string        // Path to the device or file
 	BlockSize  int           // Size of each I/O in bytes
 	Direct     bool          // Use O_DIRECT
 	ReadPct    int           // Percentage of operations that are reads (0-100)
 	Rand       bool          // True for random, false for sequential
-	Workers    int           // Number of concurrent workers (goroutines)
+	Workers    int           // Number of concurrent workers (goroutines or async loops)
 	QueueDepth int           // Global target queue depth (token bucket size)
 	MinRuntime time.Duration // Minimum time to run the test
 	MaxRuntime time.Duration // Maximum time to run the test

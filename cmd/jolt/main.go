@@ -20,6 +20,7 @@ func main() {
 
 	// Legacy Mode
 	path := flag.String("path", "", "Path to device or file")
+	engineType := flag.String("engine", "sync", "I/O engine: 'sync' or 'uring'")
 	minRuntime := flag.Duration("min-runtime", 1*time.Second, "Minimum runtime for each test point")
 	maxRuntime := flag.Duration("max-runtime", 0, "Maximum runtime for each test point (0 = unlimited)")
 	errorTarget := flag.Float64("error", 0.05, "Target relative error (stdErr/mean), e.g., 0.05 for 5%")
@@ -48,7 +49,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	eng := engine.New()
+	eng := engine.New(*engineType)
 	detector := &analyze.Detector{
 		LinearThreshold: 0.5,
 		SatThreshold:    0.1,
@@ -65,6 +66,7 @@ func main() {
 
 	searchParams := optimize.SearchParams{
 		BaseParams: engine.Params{
+			EngineType:    *engineType,
 			Path:          *path,
 			BlockSize:     *bs,
 			Direct:        *direct,
@@ -83,6 +85,17 @@ func main() {
 	}
 	
 	fmt.Printf("Starting jolt search on %s varying %s...\n", *path, *varName)
+	mode := "Pure Read"
+	if *readPct == 0 {
+		mode = "Pure Write"
+	} else if *readPct < 100 {
+		mode = fmt.Sprintf("%d/%d Read/Write Mix", *readPct, 100-*readPct)
+	}
+	directMode := "Buffered"
+	if *direct {
+		directMode = "O_DIRECT"
+	}
+	fmt.Printf("Configuration: Engine=%s, %s, %s, MinRuntime=%v\n", *engineType, mode, directMode, *minRuntime)
 	analysis, confScore, err := opt.FindKnee(searchParams)
 	if err != nil {
 		fmt.Printf("Search error: %v\n", err)
@@ -127,9 +140,9 @@ func runOptimizer() {
 	if cfg.Settings.Direct {
 		direct = "O_DIRECT"
 	}
-	fmt.Printf("Configuration: %s, %s, MinRuntime=%v\n", mode, direct, cfg.Settings.MinRuntime)
+	fmt.Printf("Configuration: Engine=%s, %s, %s, MinRuntime=%v\n", cfg.Settings.EngineType, mode, direct, cfg.Settings.MinRuntime)
 	
-	eng := engine.New()
+	eng := engine.New(cfg.Settings.EngineType)
 	optimizer := optimize.NewAnnealing(eng, cfg)
 	
 	bestState, bestRes, err := optimizer.Optimize()

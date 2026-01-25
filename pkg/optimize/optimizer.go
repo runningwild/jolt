@@ -17,11 +17,11 @@ type SearchParams struct {
 }
 
 type Optimizer struct {
-	engine   *engine.Engine
+	engine   engine.Engine
 	detector *analyze.Detector
 }
 
-func New(e *engine.Engine, d *analyze.Detector) *Optimizer {
+func New(e engine.Engine, d *analyze.Detector) *Optimizer {
 	return &Optimizer{
 		engine:   e,
 		detector: d,

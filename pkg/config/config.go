@@ -17,6 +17,7 @@ type Config struct {
 }
 
 type Settings struct {
+	EngineType       string        `yaml:"engine_type"` // "sync" or "uring"
 	Direct           bool          `yaml:"direct"`
 	ReadPct          int           `yaml:"read_pct"` // 0-100
 	Write_Deprecated bool          `yaml:"write"`    // Deprecated: use read_pct

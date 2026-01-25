@@ -1,5 +1,6 @@
 target: /dev/nvme0n1p3
 settings:
+  engine_type: uring
   direct: true
   read_pct: 80
   rand: true    # Random I/O

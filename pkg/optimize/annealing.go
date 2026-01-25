@@ -12,13 +12,13 @@ import (
 )
 
 type AnnealingOptimizer struct {
-	eng          *engine.Engine
+	eng          engine.Engine
 	cfg          *config.Config
 	rnd          *rand.Rand
 	initialScore float64
 }
 
-func NewAnnealing(eng *engine.Engine, cfg *config.Config) *AnnealingOptimizer {
+func NewAnnealing(eng engine.Engine, cfg *config.Config) *AnnealingOptimizer {
 	return &AnnealingOptimizer{
 		eng: eng,
 		cfg: cfg,
@@ -170,6 +170,7 @@ func (ao *AnnealingOptimizer) neighbor(s State, tempRatio float64) State {
 func (ao *AnnealingOptimizer) evaluate(s State) (engine.Result, error) {
 	// Construct Params from Settings + State
 	p := engine.Params{
+		EngineType:  ao.cfg.Settings.EngineType,
 		Path:        ao.cfg.Target,
 		Direct:      ao.cfg.Settings.Direct,
 		ReadPct:     ao.cfg.Settings.ReadPct,
