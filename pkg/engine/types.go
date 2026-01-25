@@ -6,12 +6,13 @@ import (
 
 // Result contains the metrics for a specific test run.
 type Result struct {
-	IOPS       float64
-	Throughput float64 // Bytes per second
-	P99Latency time.Duration
-	P50Latency time.Duration
-	TotalIOs   int64
-	Duration   time.Duration
+	IOPS             float64
+	Throughput       float64 // Bytes per second
+	P99Latency       time.Duration
+	P50Latency       time.Duration
+	TotalIOs         int64
+	Duration         time.Duration
+	MetricConfidence float64 // The achieved StdErr/Mean (lower is better)
 }
 
 // Params defines the parameters for an I/O workload.

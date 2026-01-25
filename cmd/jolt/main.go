@@ -102,5 +102,5 @@ func main() {
 		fmt.Printf("Saturation Point:    Not detected in range\n")
 	}
 	
-	fmt.Printf("Confidence:          %.1f%%\n", confScore*100)
+	fmt.Printf("Curve Consistency:   %.1f%%\n", confScore*100)
 }

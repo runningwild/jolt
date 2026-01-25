@@ -50,7 +50,7 @@ func (o *Optimizer) FindKnee(s SearchParams) (analyze.Analysis, float64, error) 
 
 		p := analyze.Point{X: val, Y: res.IOPS}
 		points = append(points, p)
-		fmt.Printf("IOPS: %.2f\n", p.Y)
+		fmt.Printf("IOPS: %.2f (conf: %.2f%%)\n", p.Y, res.MetricConfidence*100)
 
 		analysis := o.detector.Analyze(points)
 		// If we've found the saturation point, we can stop early

@@ -66,6 +66,7 @@ func (e *Engine) Run(params Params) (*Result, error) {
 	var iopsSamples []float64
 	var lastOps int64
 	var lastTime = start
+	var finalRelErr float64
 
 	for {
 		select {
@@ -91,15 +92,15 @@ func (e *Engine) Run(params Params) (*Result, error) {
 				if len(iopsSamples) > 5 {
 					mean, stdErr := calculateStats(iopsSamples)
 					
-					// If specified confidence target is met
-					if params.ConfidenceTarget > 0 && mean > 0 {
-						relErr := stdErr / mean
-						if relErr <= params.ConfidenceTarget {
-							goto Finished
+					if mean > 0 {
+						finalRelErr = stdErr / mean
+						
+						// If specified confidence target is met
+						if params.ConfidenceTarget > 0 {
+							if finalRelErr <= params.ConfidenceTarget {
+								goto Finished
+							}
 						}
-					} else {
-						// If no confidence target, purely time-based (legacy behavior fallback logic if MaxRuntime not set?)
-						// But we assume MaxRuntime is set or we default to it.
 					}
 				}
 			}
@@ -116,7 +117,7 @@ Finished:
 	close(results)
 
 	duration := time.Since(start)
-	return e.aggregate(results, duration), nil
+	return e.aggregate(results, duration, finalRelErr), nil
 }
 
 func calculateStats(samples []float64) (mean float64, stdErr float64) {
@@ -218,12 +219,13 @@ func (e *Engine) runWorker(id int, params Params, tokens chan struct{}, done cha
 	}
 }
 
-func (e *Engine) aggregate(results chan workerResult, duration time.Duration) *Result {
+func (e *Engine) aggregate(results chan workerResult, duration time.Duration, relErr float64) *Result {
 	var totalIOs int64
 	var allLatencies []time.Duration
 
 	for res := range results {
 		if res.err != nil {
+			// In a real tool, we'd handle errors better
 			continue
 		}
 		totalIOs += res.ioCount
@@ -231,7 +233,7 @@ func (e *Engine) aggregate(results chan workerResult, duration time.Duration) *R
 	}
 
 	if len(allLatencies) == 0 {
-		return &Result{Duration: duration}
+		return &Result{Duration: duration, MetricConfidence: relErr}
 	}
 
 	sort.Slice(allLatencies, func(i, j int) bool {
@@ -239,11 +241,12 @@ func (e *Engine) aggregate(results chan workerResult, duration time.Duration) *R
 	})
 
 	return &Result{
-		IOPS:       float64(totalIOs) / duration.Seconds(),
-		Throughput: 0,
-		P50Latency: allLatencies[len(allLatencies)/2],
-		P99Latency: allLatencies[int(float64(len(allLatencies))*0.99)],
-		TotalIOs:   totalIOs,
-		Duration:   duration,
+		IOPS:             float64(totalIOs) / duration.Seconds(),
+		Throughput:       0, // Calculate if needed later
+		P50Latency:       allLatencies[len(allLatencies)/2],
+		P99Latency:       allLatencies[int(float64(len(allLatencies))*0.99)],
+		TotalIOs:         totalIOs,
+		Duration:         duration,
+		MetricConfidence: relErr,
 	}
 }
