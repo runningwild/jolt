@@ -27,7 +27,7 @@ type Params struct {
 	QueueDepth int           // Global target queue depth (token bucket size)
 	MinRuntime time.Duration // Minimum time to run the test
 	MaxRuntime time.Duration // Maximum time to run the test
-	ConfidenceTarget float64 // Target standard error / mean (e.g. 0.01 for 1%)
+	ErrorTarget float64      // Target standard error / mean (e.g. 0.01 for 1%)
 	
 	// Optional callback for real-time progress updates
 	Progress func(Result)

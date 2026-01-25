@@ -106,15 +106,17 @@ func (e *Engine) Run(params Params) (*Result, error) {
 			// Check termination conditions
 			if elapsed > params.MinRuntime {
 				if len(iopsSamples) > 5 {
-					if mean > 0 {
-						if params.ConfidenceTarget > 0 {
-							if finalRelErr <= params.ConfidenceTarget {
-								reason = "Converged"
-								goto Finished
-							}
-						}
-					}
-				}
+										if mean > 0 {
+											// finalRelErr already calculated above
+											
+											// If specified confidence target is met
+											if params.ErrorTarget > 0 {
+												if finalRelErr <= params.ErrorTarget {
+													reason = "Converged"
+													goto Finished
+												}
+											}
+										}				}
 			}
 
 			if params.MaxRuntime > 0 && elapsed >= params.MaxRuntime {
