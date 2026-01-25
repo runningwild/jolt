@@ -255,9 +255,11 @@ func (ao *AnnealingOptimizer) calculateScore(res engine.Result) (float64, string
 				actualDur = res.P50Latency
 				if res.P50Latency > limitVal { passed = false }
 			case "p95_latency":
-				// We don't have P95 in Result yet, using P99 as fallback
-				actualDur = res.P99Latency 
-				if res.P99Latency > limitVal { passed = false }
+				actualDur = res.P95Latency
+				if res.P95Latency > limitVal { passed = false }
+			case "p999_latency":
+				actualDur = res.P999Latency
+				if res.P999Latency > limitVal { passed = false }
 			}
 			
 			if !passed {
