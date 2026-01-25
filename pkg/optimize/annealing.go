@@ -292,33 +292,24 @@ func (ao *AnnealingOptimizer) calculateScore(res engine.Result) (float64, string
 
 func (ao *AnnealingOptimizer) formatMetrics(res engine.Result) string {
 	var parts []string
+	
+	// Objective-specific metrics
 	for _, obj := range ao.cfg.Objectives {
 		switch obj.Metric {
 		case "iops":
 			parts = append(parts, fmt.Sprintf("IOPS: %.0f", res.IOPS))
 		case "throughput":
 			parts = append(parts, fmt.Sprintf("BW: %.2f MB/s", res.Throughput/1024/1024))
-		case "p99_latency":
-			parts = append(parts, fmt.Sprintf("P99: %v", res.P99Latency))
-		case "p50_latency":
-			parts = append(parts, fmt.Sprintf("P50: %v", res.P50Latency))
 		}
-	}
-	if len(parts) == 0 {
-		return fmt.Sprintf("IOPS: %.0f", res.IOPS)
 	}
 
-	seen := make(map[string]bool)
-	var unique []string
-	for _, p := range parts {
-		if !seen[p] {
-			unique = append(unique, p)
-			seen[p] = true
-		}
-	}
+	// Always show latencies
+	parts = append(parts, fmt.Sprintf("p50:%v", res.P50Latency.Round(time.Microsecond)))
+	parts = append(parts, fmt.Sprintf("p95:%v", res.P95Latency.Round(time.Microsecond)))
+	parts = append(parts, fmt.Sprintf("p99:%v", res.P99Latency.Round(time.Microsecond)))
 
 	result := ""
-	for i, p := range unique {
+	for i, p := range parts {
 		if i > 0 { result += ", " }
 		result += p
 	}

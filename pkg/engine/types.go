@@ -6,14 +6,17 @@ import (
 
 // Result contains the metrics for a specific test run.
 type Result struct {
-	IOPS             float64
-	Throughput       float64 // Bytes per second
-	P99Latency       time.Duration
-	P50Latency       time.Duration
-	TotalIOs         int64
-	Duration         time.Duration
-	MetricConfidence float64 // The achieved StdErr/Mean (lower is better)
-	TerminationReason string // Why the test finished (Timeout, Converged, etc.)
+	IOPS              float64
+	Throughput        float64 // Bytes per second
+	MeanLatency       time.Duration
+	P50Latency        time.Duration
+	P95Latency        time.Duration
+	P99Latency        time.Duration
+	P999Latency       time.Duration
+	TotalIOs          int64
+	Duration          time.Duration
+	MetricConfidence  float64 // The achieved StdErr/Mean (lower is better)
+	TerminationReason string  // Why the test finished (Timeout, Converged, etc.)
 }
 
 // Engine defines the interface for different I/O execution strategies.

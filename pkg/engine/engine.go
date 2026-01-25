@@ -257,40 +257,93 @@ func (e *SyncEngine) runWorker(id int, params Params, tokens chan struct{}, done
 }
 
 func (e *SyncEngine) aggregate(results chan workerResult, duration time.Duration, relErr float64) (*Result, error) {
+
 	var totalIOs int64
+
 	var allLatencies []time.Duration
+
 	var firstErr error
 
+	var totalLatency time.Duration
+
+
+
 	for res := range results {
+
 		if res.err != nil {
+
 			if firstErr == nil {
+
 				firstErr = res.err
+
 			}
+
 			continue
+
 		}
+
 		totalIOs += res.ioCount
+
 		allLatencies = append(allLatencies, res.latencies...)
+
+		for _, l := range res.latencies {
+
+			totalLatency += l
+
+		}
+
 	}
+
+
 
 	if firstErr != nil {
+
 		return nil, firstErr
+
 	}
+
+
 
 	if len(allLatencies) == 0 {
+
 		return &Result{Duration: duration, MetricConfidence: relErr}, nil
+
 	}
 
+
+
 	sort.Slice(allLatencies, func(i, j int) bool {
+
 		return allLatencies[i] < allLatencies[j]
+
 	})
 
+
+
+	n := len(allLatencies)
+
 	return &Result{
+
 		IOPS:             float64(totalIOs) / duration.Seconds(),
-		Throughput:       0, // Calculate if needed later
-		P50Latency:       allLatencies[len(allLatencies)/2],
-		P99Latency:       allLatencies[int(float64(len(allLatencies))*0.99)],
+
+		Throughput:       0, // Calculated in Run
+
+		MeanLatency:      totalLatency / time.Duration(n),
+
+		P50Latency:       allLatencies[n/2],
+
+		P95Latency:       allLatencies[int(float64(n)*0.95)],
+
+		P99Latency:       allLatencies[int(float64(n)*0.99)],
+
+		P999Latency:      allLatencies[int(float64(n)*0.999)],
+
 		TotalIOs:         totalIOs,
+
 		Duration:         duration,
+
 		MetricConfidence: relErr,
+
 	}, nil
+
 }
