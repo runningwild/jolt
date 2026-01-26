@@ -19,27 +19,36 @@ type Detector struct {
 	SatThreshold    float64 // Slope drop-off to signal saturation (e.g. 0.05)
 }
 
+// Analyze processes a series of performance points (X=Load, Y=Performance)
+// to find critical transitions. It assumes a typical performance curve:
+// linear growth -> knee -> saturation/plateau.
 func (d *Detector) Analyze(points []Point) Analysis {
 	if len(points) < 3 {
 		return Analysis{}
 	}
 
 	// Calculate initial slope (assumed linear region)
+	// TODO: This is sensitive to noise in the first two points. 
+	// A regression over the first few points would be more robust.
 	initialSlope := (points[1].Y - points[0].Y) / (points[1].X - points[0].X)
 	
 	var analysis Analysis
 
 	for i := 2; i < len(points); i++ {
-		// Instantaneous slope
+		// Instantaneous slope between the current and previous point
 		currentSlope := (points[i].Y - points[i-1].Y) / (points[i].X - points[i-1].X)
 		
-		// Look for Linear Limit (Knee) - kept sensitive
+		// Look for Linear Limit (Knee).
+		// We define the knee as the point where the marginal gain (slope) drops 
+		// significantly below the initial linear trend (e.g., < 50% of initial slope).
 		if analysis.LinearLimit.X == 0 && currentSlope < initialSlope*d.LinearThreshold {
 			analysis.LinearLimit = points[i-1]
 		}
 
-		// Look for Saturation Point (Plateau) - smoothed
-		// Check average slope of last 3 points (if available) to confirm saturation
+		// Look for Saturation Point (Plateau).
+		// This is where adding more load yields almost no benefit (slope near zero).
+		// We use a smoothed slope (average of last 3 points) to avoid premature 
+		// triggering due to noise.
 		avgSlope := currentSlope
 		if i >= 3 {
 			prevSlope := (points[i-1].Y - points[i-2].Y) / (points[i-1].X - points[i-2].X)

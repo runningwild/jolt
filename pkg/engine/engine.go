@@ -46,7 +46,11 @@ func (e *SyncEngine) Run(params Params) (*Result, error) {
 	// Atomic counter for live monitoring
 	var opsCounter int64
 
-	// Create token bucket for Global Queue Depth
+	// Create token bucket for Global Queue Depth enforcement.
+	// In the SyncEngine, "Queue Depth" effectively limits the maximum number of
+	// concurrent I/O operations across all workers. The `tokens` channel acts
+	// as a semaphore: a worker must acquire a token before performing I/O
+	// and release it afterwards.
 	qd := params.QueueDepth
 	if qd <= 0 {
 		qd = params.Workers

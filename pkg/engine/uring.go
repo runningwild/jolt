@@ -27,14 +27,28 @@ func (e *UringEngine) Run(params Params) (*Result, error) {
 		return nil, fmt.Errorf("invalid block size: %d", params.BlockSize)
 	}
 
+	// 1. Sanitize Inputs
+	// Default to 1 worker if not specified
 	numWorkers := params.Workers
 	if numWorkers <= 0 {
 		numWorkers = 1
 	}
+
+	// Default QueueDepth to match Workers if not specified.
+	// This ensures we have at least 1 slot per worker.
+	if params.QueueDepth <= 0 {
+		params.QueueDepth = numWorkers
+	}
+
+	// If the user requested more workers than queue slots, cap workers.
+	// It doesn't make sense to have a worker with 0 queue slots.
 	if numWorkers > params.QueueDepth {
 		numWorkers = params.QueueDepth
 	}
 
+	// 2. Distribute Queue Depth among workers
+	// We divide the total QD as evenly as possible.
+	// Remainder slots are distributed 1-per-worker until exhausted.
 	qdPerWorker := params.QueueDepth / numWorkers
 	remainder := params.QueueDepth % numWorkers
 

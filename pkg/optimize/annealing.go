@@ -29,6 +29,11 @@ func NewAnnealing(eng engine.Engine, cfg *config.Config) *AnnealingOptimizer {
 // State represents a specific configuration of variables.
 type State map[string]int
 
+// Optimize runs the Simulated Annealing algorithm to find the optimal configuration.
+// It explores the search space by iteratively moving to "neighbor" states.
+// Improvements are always accepted. Worse states are accepted with a probability
+// that decreases as the "temperature" cools down, allowing the algorithm to 
+// escape local optima early on.
 func (ao *AnnealingOptimizer) Optimize() (State, engine.Result, error) {
 	// 1. Initial State
 	current := ao.randomState()
