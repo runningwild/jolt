@@ -22,21 +22,9 @@ type Settings struct {
 	ReadPct          int           `yaml:"read_pct"` // 0-100
 	Write_Deprecated bool          `yaml:"write"`    // Deprecated: use read_pct
 	Rand             bool          `yaml:"rand"`
-	MinRuntime time.Duration `yaml:"min_runtime"`
-	MaxRuntime time.Duration `yaml:"max_runtime"`
-	ErrorTarget float64      `yaml:"error_target"`
-
-	// Annealing settings
-	InitialTemp     float64 `yaml:"initial_temp"`    // Starting temperature; should match the magnitude of score changes (e.g., 1000 for IOPS)
-	CoolingRate     float64 `yaml:"cooling_rate"`    // How fast to cool; typical values are 0.9 to 0.99
-	MinTemp         float64 `yaml:"min_temp"`        // Temperature at which optimization stops (e.g., 0.01)
-	StepsPerTemp    int     `yaml:"steps_per_temp"`   // Number of iterations to run at each temperature level (e.g., 1-10)
-	RestartInterval int     `yaml:"restart_interval"` // If > 0, reset to best state after this many steps without improvement
-
-	// Gradient Descent settings
-	InitialStepSize int     `yaml:"initial_step_size"`
-	MinPrecision    float64 `yaml:"min_precision"` // Low precision for steep slopes (e.g. 0.1)
-	MaxPrecision    float64 `yaml:"max_precision"` // High precision for flat slopes (e.g. 0.01)
+	MinRuntime       time.Duration `yaml:"min_runtime"`
+	MaxRuntime       time.Duration `yaml:"max_runtime"`
+	ErrorTarget      float64       `yaml:"error_target"`
 }
 
 // Variable defines a parameter to optimize.
@@ -81,18 +69,6 @@ func Load(path string) (*Config, error) {
 
 	if cfg.Settings.MaxRuntime == 0 {
 		cfg.Settings.MaxRuntime = 5 * time.Second
-	}
-	if cfg.Settings.InitialTemp == 0 {
-		cfg.Settings.InitialTemp = 1000.0
-	}
-	if cfg.Settings.CoolingRate == 0 {
-		cfg.Settings.CoolingRate = 0.95
-	}
-	if cfg.Settings.MinTemp == 0 {
-		cfg.Settings.MinTemp = 0.01
-	}
-	if cfg.Settings.StepsPerTemp == 0 {
-		cfg.Settings.StepsPerTemp = 1
 	}
 	return &cfg, nil
 }

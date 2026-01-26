@@ -148,12 +148,9 @@ func runOptimizer() {
 	var bestRes engine.Result
 	
 	switch cfg.Optimizer {
-	case "simulated_annealing":
-		optimizer := optimize.NewAnnealing(eng, cfg)
-		bestState, bestRes, err = optimizer.Optimize()
 	default:
-		if cfg.Optimizer == "" {
-			fmt.Println("No optimizer specified, defaulting to coordinate_descent")
+		if cfg.Optimizer != "" && cfg.Optimizer != "coordinate_descent" {
+			fmt.Printf("Warning: Unknown optimizer '%s', defaulting to coordinate_descent\n", cfg.Optimizer)
 		}
 		optimizer := optimize.NewCoordinate(eng, cfg)
 		bestState, bestRes, err = optimizer.Optimize()

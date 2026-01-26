@@ -6,12 +6,8 @@ settings:
   read_pct: 80
   rand: true    # Random I/O
   min_runtime: 2s
-  max_runtime: 30s
-  error_target: 0.01
-  initial_temp: 4000
-  restart_interval: 10
-  cooling_rate: 0.95
-  steps_per_temp: 5
+  max_runtime: 5s
+  error_target: 0.05
 
 search:
   - variable: block_size
@@ -19,7 +15,7 @@ search:
   - variable: queue_depth
     range: [1, 64]
   - variable: workers
-    values: [4,8,16]
+    range: [2, 16]
 
 objectives:
   - type: maximize
