@@ -129,7 +129,7 @@ func runOptimizer() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Optimizing %s using Simulated Annealing...\n", cfg.Target)
+	fmt.Printf("Optimizing %s using %s...\n", cfg.Target, cfg.Optimizer)
 	mode := fmt.Sprintf("%d/%d Read/Write Mix", cfg.Settings.ReadPct, 100-cfg.Settings.ReadPct)
 	if cfg.Settings.ReadPct == 100 {
 		mode = "Pure Read"
@@ -143,9 +143,22 @@ func runOptimizer() {
 	fmt.Printf("Configuration: Engine=%s, %s, %s, MinRuntime=%v\n", cfg.Settings.EngineType, mode, direct, cfg.Settings.MinRuntime)
 	
 	eng := engine.New(cfg.Settings.EngineType)
-	optimizer := optimize.NewAnnealing(eng, cfg)
 	
-	bestState, bestRes, err := optimizer.Optimize()
+	var bestState optimize.State
+	var bestRes engine.Result
+	
+	switch cfg.Optimizer {
+	case "simulated_annealing":
+		optimizer := optimize.NewAnnealing(eng, cfg)
+		bestState, bestRes, err = optimizer.Optimize()
+	default:
+		if cfg.Optimizer == "" {
+			fmt.Println("No optimizer specified, defaulting to coordinate_descent")
+		}
+		optimizer := optimize.NewCoordinate(eng, cfg)
+		bestState, bestRes, err = optimizer.Optimize()
+	}
+
 	if err != nil {
 		fmt.Printf("Optimization failed: %v\n", err)
 		os.Exit(1)

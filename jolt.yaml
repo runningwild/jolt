@@ -1,4 +1,5 @@
 target: /dev/nvme0n1p3
+optimizer: coordinate_descent
 settings:
   engine_type: uring
   direct: true
@@ -25,4 +26,4 @@ objectives:
     metric: iops
   - type: constraint
     metric: p95_latency
-    limit: 2ms
+    limit: 5ms

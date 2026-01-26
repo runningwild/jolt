@@ -12,7 +12,7 @@ type Config struct {
 	Target    string      `yaml:"target"`
 	Search    []Variable  `yaml:"search"`
 	Objectives []Objective `yaml:"objectives"`
-	Optimizer string      `yaml:"optimizer"` // "simulated_annealing"
+	Optimizer string      `yaml:"optimizer"` // "simulated_annealing", "coordinate_descent"
 	Settings  Settings    `yaml:"settings"`
 }
 
@@ -32,6 +32,11 @@ type Settings struct {
 	MinTemp         float64 `yaml:"min_temp"`        // Temperature at which optimization stops (e.g., 0.01)
 	StepsPerTemp    int     `yaml:"steps_per_temp"`   // Number of iterations to run at each temperature level (e.g., 1-10)
 	RestartInterval int     `yaml:"restart_interval"` // If > 0, reset to best state after this many steps without improvement
+
+	// Gradient Descent settings
+	InitialStepSize int     `yaml:"initial_step_size"`
+	MinPrecision    float64 `yaml:"min_precision"` // Low precision for steep slopes (e.g. 0.1)
+	MaxPrecision    float64 `yaml:"max_precision"` // High precision for flat slopes (e.g. 0.01)
 }
 
 // Variable defines a parameter to optimize.
