@@ -19,6 +19,10 @@ func NewCoordinate(eng engine.Engine, cfg *config.Config) *CoordinateOptimizer {
 	}
 }
 
+func (co *CoordinateOptimizer) GetHistory() []HistoryEntry {
+	return co.eval.History
+}
+
 func (co *CoordinateOptimizer) Optimize() (State, engine.Result, error) {
 	// Start with middle-of-the-road values
 	current := make(State)

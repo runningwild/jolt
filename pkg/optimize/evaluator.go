@@ -15,6 +15,14 @@ type Evaluator struct {
 	eng          engine.Engine
 	cfg          *config.Config
 	initialScore float64
+	History      []HistoryEntry
+}
+
+type HistoryEntry struct {
+	State  State         `json:"state"`
+	Result engine.Result `json:"result"`
+	Score  float64       `json:"score"`
+	Reason string        `json:"reason,omitempty"`
 }
 
 // State represents a specific configuration of variables.
@@ -24,6 +32,7 @@ func NewEvaluator(eng engine.Engine, cfg *config.Config) *Evaluator {
 	return &Evaluator{
 		eng: eng,
 		cfg: cfg,
+		History: make([]HistoryEntry, 0),
 	}
 }
 
@@ -59,6 +68,19 @@ func (e *Evaluator) Evaluate(s State) (engine.Result, float64, string, error) {
 	}
 
 	score := e.scaleScore(raw, reason)
+	
+	// Record history
+	// Copy state to avoid reference issues
+	stateCopy := make(State)
+	for k, v := range s { stateCopy[k] = v }
+	
+	e.History = append(e.History, HistoryEntry{
+		State:  stateCopy,
+		Result: *res,
+		Score:  score,
+		Reason: reason,
+	})
+
 	return *res, score, reason, nil
 }
 

@@ -1,12 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"time"
 
-	"github.com/runningwild/jolt/pkg/analyze"
 	"github.com/runningwild/jolt/pkg/config"
 	"github.com/runningwild/jolt/pkg/engine"
 	"github.com/runningwild/jolt/pkg/optimize"
@@ -18,28 +18,35 @@ func main() {
 		return
 	}
 
-	// Legacy Mode
+	runLegacyFlags()
+}
+
+func runLegacyFlags() {
+	// Flags
 	path := flag.String("path", "", "Path to device or file")
 	engineType := flag.String("engine", "sync", "I/O engine: 'sync' or 'uring'")
-	minRuntime := flag.Duration("min-runtime", 1*time.Second, "Minimum runtime for each test point")
-	maxRuntime := flag.Duration("max-runtime", 0, "Maximum runtime for each test point (0 = unlimited)")
-	errorTarget := flag.Float64("error", 0.05, "Target relative error (stdErr/mean), e.g., 0.05 for 5%")
-	
 	bs := flag.Int("bs", 4096, "Block size")
 	direct := flag.Bool("direct", true, "Use O_DIRECT")
 	readPct := flag.Int("read-pct", 100, "Read percentage (0-100)")
 	randIO := flag.Bool("rand", true, "Random I/O (default is sequential)")
 	
-	minWorkers := flag.Int("min-workers", 1, "Minimum number of workers")
-	maxWorkers := flag.Int("max-workers", 32, "Maximum number of workers")
-	stepWorkers := flag.Int("step-workers", 1, "Step for workers")
+	minRuntime := flag.Duration("min-runtime", 1*time.Second, "Minimum runtime for each test point")
+	maxRuntime := flag.Duration("max-runtime", 5*time.Second, "Maximum runtime for each test point")
+	errorTarget := flag.Float64("error", 0.05, "Target relative error (stdErr/mean), e.g., 0.05 for 5%")
 
-	queueDepth := flag.Int("queue-depth", 0, "Fixed Global Queue Depth (0 = num workers)")
-	varName := flag.String("var", "workers", "Variable to optimize: 'workers' or 'queuedepth'")
-	
+	// Search Params
+	varName := flag.String("var", "workers", "Variable to optimize: 'workers', 'queue_depth', 'block_size'")
 	minVal := flag.Int("min", 1, "Minimum value for the variable")
 	maxVal := flag.Int("max", 32, "Maximum value for the variable")
 	stepVal := flag.Int("step", 1, "Step value for the variable")
+	
+	// Legacy worker flags override if set
+	minWorkers := flag.Int("min-workers", 1, "Minimum number of workers")
+	maxWorkers := flag.Int("max-workers", 32, "Maximum number of workers")
+	stepWorkers := flag.Int("step-workers", 1, "Step for workers")
+	
+	queueDepth := flag.Int("queue-depth", 1, "Fixed Global Queue Depth")
+	reportFile := flag.String("report", "", "Write optimization history to JSON file")
 
 	flag.Parse()
 
@@ -49,78 +56,87 @@ func main() {
 		os.Exit(1)
 	}
 
-	eng := engine.New(*engineType)
-	detector := &analyze.Detector{
-		LinearThreshold: 0.5,
-		SatThreshold:    0.1,
+	// 1. Build Config from Flags
+	cfg := &config.Config{
+		Target: *path,
+		Settings: config.Settings{
+			EngineType:  *engineType,
+			Direct:      *direct,
+			ReadPct:     *readPct,
+			Rand:        *randIO,
+			MinRuntime:  *minRuntime,
+			MaxRuntime:  *maxRuntime,
+			ErrorTarget: *errorTarget,
+		},
+		Objectives: []config.Objective{
+			{Type: "maximize", Metric: "iops"},
+		},
 	}
-	opt := optimize.New(eng, detector)
 
-	// Determine ranges based on legacy worker flags or new generic flags
-	start, end, step := float64(*minVal), float64(*maxVal), float64(*stepVal)
+	// 2. Map Legacy Flags to Search Space
+	// Handle backward compat for -min-workers etc
+	start, end, step := *minVal, *maxVal, *stepVal
 	if *varName == "workers" {
 		if *minWorkers != 1 || *maxWorkers != 32 || *stepWorkers != 1 {
-			start, end, step = float64(*minWorkers), float64(*maxWorkers), float64(*stepWorkers)
+			start, end, step = *minWorkers, *maxWorkers, *stepWorkers
 		}
 	}
 
-	searchParams := optimize.SearchParams{
-		BaseParams: engine.Params{
-			EngineType:    *engineType,
-			Path:          *path,
-			BlockSize:     *bs,
-			Direct:        *direct,
-			ReadPct:       *readPct,
-			Rand:          *randIO,
-			Workers:       *maxWorkers,
-			QueueDepth:    *queueDepth,
-			MinRuntime:    *minRuntime,
-			MaxRuntime:    *maxRuntime,
-			ErrorTarget:   *errorTarget,
-		},
-		VarName: *varName,
-		Min:     start,
-		Max:     end,
-		Step:    step,
+	// Define the variable to search
+	searchVar := config.Variable{
+		Name:  *varName,
+		Range: []int{start, end},
+		Step:  step,
 	}
+	cfg.Search = append(cfg.Search, searchVar)
+
+	// 3. Handle Fixed Values (Defaults)
+	// If we are NOT searching "workers", we fix workers to -max-workers (or -queue-depth for legacy reasons?)
+	// Actually, the legacy engine used -max-workers as the fixed count when searching queue_depth.
+	// But `CoordinateOptimizer` defaults to the midpoint of a range or we can inject a fixed variable.
+	// We can add fixed variables as single-value ranges.
 	
-	fmt.Printf("Starting jolt search on %s varying %s...\n", *path, *varName)
-	mode := "Pure Read"
-	if *readPct == 0 {
-		mode = "Pure Write"
-	} else if *readPct < 100 {
-		mode = fmt.Sprintf("%d/%d Read/Write Mix", *readPct, 100-*readPct)
+	if *varName != "workers" {
+		cfg.Search = append(cfg.Search, config.Variable{
+			Name: "workers", Values: []int{*maxWorkers},
+		})
 	}
-	directMode := "Buffered"
-	if *direct {
-		directMode = "O_DIRECT"
+	if *varName != "queue_depth" {
+		cfg.Search = append(cfg.Search, config.Variable{
+			Name: "queue_depth", Values: []int{*queueDepth},
+		})
 	}
-	fmt.Printf("Configuration: Engine=%s, %s, %s, MinRuntime=%v\n", *engineType, mode, directMode, *minRuntime)
-	analysis, confScore, err := opt.FindKnee(searchParams)
+	if *varName != "block_size" {
+		cfg.Search = append(cfg.Search, config.Variable{
+			Name: "block_size", Values: []int{*bs},
+		})
+	}
+
+	fmt.Printf("Starting jolt optimization on %s varying %s...\n", *path, *varName)
+	
+	// 4. Run Optimization
+	eng := engine.New(cfg.Settings.EngineType)
+	optimizer := optimize.NewCoordinate(eng, cfg)
+	
+	bestState, bestRes, err := optimizer.Optimize()
 	if err != nil {
-		fmt.Printf("Search error: %v\n", err)
+		fmt.Printf("Optimization failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("\n--- Analysis Results ---\n")
-	if analysis.LinearLimit.X != 0 {
-		fmt.Printf("Linear Limit (Knee): %s = %.0f (IOPS: %.2f)\n", searchParams.VarName, analysis.LinearLimit.X, analysis.LinearLimit.Y)
-	} else {
-		fmt.Printf("Linear Limit (Knee): Not detected in range\n")
-	}
+	fmt.Printf("\n>>> Optimization Complete <<<\n")
+	fmt.Printf("Best State: %v\n", bestState)
+	fmt.Printf("Metrics:    IOPS=%.0f, Throughput=%.2f MB/s\n", bestRes.IOPS, bestRes.Throughput/1024/1024)
 
-	if analysis.SaturationPoint.X != 0 {
-		fmt.Printf("Saturation Point:    %s = %.0f (IOPS: %.2f)\n", searchParams.VarName, analysis.SaturationPoint.X, analysis.SaturationPoint.Y)
-	} else {
-		fmt.Printf("Saturation Point:    Not detected in range\n")
+	if *reportFile != "" {
+		writeReport(*reportFile, optimizer.GetHistory())
 	}
-	
-	fmt.Printf("Curve Consistency:   %.1f%%\n", confScore*100)
 }
 
 func runOptimizer() {
 	optimizeCmd := flag.NewFlagSet("optimize", flag.ExitOnError)
 	configFile := optimizeCmd.String("config", "jolt.yaml", "Path to configuration file")
+	reportFile := optimizeCmd.String("report", "", "Write optimization history to JSON file")
 	optimizeCmd.Parse(os.Args[2:])
 
 	cfg, err := config.Load(*configFile)
@@ -129,33 +145,12 @@ func runOptimizer() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Optimizing %s using %s...\n", cfg.Target, cfg.Optimizer)
-	mode := fmt.Sprintf("%d/%d Read/Write Mix", cfg.Settings.ReadPct, 100-cfg.Settings.ReadPct)
-	if cfg.Settings.ReadPct == 100 {
-		mode = "Pure Read"
-	} else if cfg.Settings.ReadPct == 0 {
-		mode = "Pure Write"
-	}
-	direct := "Buffered"
-	if cfg.Settings.Direct {
-		direct = "O_DIRECT"
-	}
-	fmt.Printf("Configuration: Engine=%s, %s, %s, MinRuntime=%v\n", cfg.Settings.EngineType, mode, direct, cfg.Settings.MinRuntime)
+	fmt.Printf("Optimizing %s using Coordinate Descent...\n", cfg.Target)
 	
 	eng := engine.New(cfg.Settings.EngineType)
+	optimizer := optimize.NewCoordinate(eng, cfg)
 	
-	var bestState optimize.State
-	var bestRes engine.Result
-	
-	switch cfg.Optimizer {
-	default:
-		if cfg.Optimizer != "" && cfg.Optimizer != "coordinate_descent" {
-			fmt.Printf("Warning: Unknown optimizer '%s', defaulting to coordinate_descent\n", cfg.Optimizer)
-		}
-		optimizer := optimize.NewCoordinate(eng, cfg)
-		bestState, bestRes, err = optimizer.Optimize()
-	}
-
+	bestState, bestRes, err := optimizer.Optimize()
 	if err != nil {
 		fmt.Printf("Optimization failed: %v\n", err)
 		os.Exit(1)
@@ -163,5 +158,22 @@ func runOptimizer() {
 
 	fmt.Printf("\n>>> Optimization Complete <<<\n")
 	fmt.Printf("Best State: %v\n", bestState)
-	fmt.Printf("Metrics:    IOPS=%.0f, P99=%v\n", bestRes.IOPS, bestRes.P99Latency)
+	fmt.Printf("Metrics:    IOPS=%.0f, Throughput=%.2f MB/s\n", bestRes.IOPS, bestRes.Throughput/1024/1024)
+
+	if *reportFile != "" {
+		writeReport(*reportFile, optimizer.GetHistory())
+	}
+}
+
+func writeReport(path string, history []optimize.HistoryEntry) {
+	data, err := json.MarshalIndent(history, "", "  ")
+	if err != nil {
+		fmt.Printf("Failed to marshal report: %v\n", err)
+		return
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		fmt.Printf("Failed to write report: %v\n", err)
+		return
+	}
+	fmt.Printf("Report written to %s\n", path)
 }
