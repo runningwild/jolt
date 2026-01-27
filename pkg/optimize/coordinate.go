@@ -43,6 +43,11 @@ func (co *CoordinateOptimizer) Optimize() (State, engine.Result, error) {
 	for {
 		improved := false
 		for _, v := range co.cfg.Search {
+			// Skip single-value variables
+			if len(v.Values) == 1 || (len(v.Values) == 0 && v.Range[0] == v.Range[1]) {
+				continue
+			}
+
 			fmt.Printf("Optimizing variable: %s\n", v.Name)
 			
 			var localBestVal int
