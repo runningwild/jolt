@@ -10,12 +10,12 @@ import (
 	"github.com/runningwild/jolt/pkg/engine"
 )
 
-// Evaluator handles running tests and computing normalized scores.
 type Evaluator struct {
 	eng          engine.Engine
 	cfg          *config.Config
 	initialScore float64
 	History      []HistoryEntry
+	Cache        map[string]engine.Result // Cache of aggregated results
 }
 
 type HistoryEntry struct {
@@ -33,6 +33,7 @@ func NewEvaluator(eng engine.Engine, cfg *config.Config) *Evaluator {
 		eng: eng,
 		cfg: cfg,
 		History: make([]HistoryEntry, 0),
+		Cache:   make(map[string]engine.Result),
 	}
 }
 
@@ -51,6 +52,8 @@ func (e *Evaluator) Evaluate(s State) (engine.Result, float64, string, error) {
 		QueueDepth:  1,
 	}
 
+	key := e.hashState(s)
+
 	if v, ok := s["block_size"]; ok { p.BlockSize = v }
 	if v, ok := s["workers"]; ok { p.Workers = v }
 	if v, ok := s["queue_depth"]; ok { p.QueueDepth = v }
@@ -59,6 +62,35 @@ func (e *Evaluator) Evaluate(s State) (engine.Result, float64, string, error) {
 	if err != nil {
 		return engine.Result{}, 0, "", err
 	}
+
+	// Aggregate with cached result
+	if cached, found := e.Cache[key]; found {
+		// Merge logic
+		totalDuration := cached.Duration + res.Duration
+		totalIOs := cached.TotalIOs + res.TotalIOs
+		
+		// Weighted average for latencies
+		wOld := float64(cached.TotalIOs)
+		wNew := float64(res.TotalIOs)
+		totalW := wOld + wNew
+		
+		mergedP50 := time.Duration((float64(cached.P50Latency)*wOld + float64(res.P50Latency)*wNew) / totalW)
+		mergedP99 := time.Duration((float64(cached.P99Latency)*wOld + float64(res.P99Latency)*wNew) / totalW)
+		
+		// Recalculate metrics
+		mergedRes := engine.Result{
+			TotalIOs:         totalIOs,
+			Duration:         totalDuration,
+			IOPS:             float64(totalIOs) / totalDuration.Seconds(),
+			Throughput:       float64(totalIOs*int64(p.BlockSize)) / totalDuration.Seconds(),
+			P50Latency:       mergedP50,
+			P99Latency:       mergedP99,
+			MetricConfidence: (cached.MetricConfidence + res.MetricConfidence) / 2, // Approximate
+			TerminationReason: res.TerminationReason, // Keep latest reason
+		}
+		*res = mergedRes
+	}
+	e.Cache[key] = *res
 
 	raw, reason := e.calculateScore(*res)
 	
@@ -82,6 +114,13 @@ func (e *Evaluator) Evaluate(s State) (engine.Result, float64, string, error) {
 	})
 
 	return *res, score, reason, nil
+}
+
+func (e *Evaluator) hashState(s State) string {
+	// deterministic key
+	// Map iteration is random, so we must sort keys or hardcode known keys
+	// We only have 3 known keys
+	return fmt.Sprintf("bs=%d:qd=%d:w=%d", s["block_size"], s["queue_depth"], s["workers"])
 }
 
 func (e *Evaluator) scaleScore(raw float64, reason string) float64 {
