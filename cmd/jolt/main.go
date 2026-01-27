@@ -40,12 +40,8 @@ func runLegacyFlags() {
 	maxVal := flag.Int("max", 32, "Maximum value for the variable")
 	stepVal := flag.Int("step", 1, "Step value for the variable")
 	
-	// Legacy worker flags override if set
-	minWorkers := flag.Int("min-workers", 1, "Minimum number of workers")
-	maxWorkers := flag.Int("max-workers", 32, "Maximum number of workers")
-	stepWorkers := flag.Int("step-workers", 1, "Step for workers")
-	
-	queueDepth := flag.Int("queue-depth", 1, "Fixed Global Queue Depth")
+	workers := flag.Int("workers", 1, "Fixed number of workers (when not optimizing workers)")
+	queueDepth := flag.Int("queue-depth", 1, "Fixed Global Queue Depth (when not optimizing queue_depth)")
 	reportFile := flag.String("report", "", "Write optimization history to JSON file")
 
 	flag.Parse()
@@ -73,32 +69,18 @@ func runLegacyFlags() {
 		},
 	}
 
-	// 2. Map Legacy Flags to Search Space
-	// Handle backward compat for -min-workers etc
-	start, end, step := *minVal, *maxVal, *stepVal
-	if *varName == "workers" {
-		if *minWorkers != 1 || *maxWorkers != 32 || *stepWorkers != 1 {
-			start, end, step = *minWorkers, *maxWorkers, *stepWorkers
-		}
-	}
-
-	// Define the variable to search
+	// 2. Define the variable to search
 	searchVar := config.Variable{
 		Name:  *varName,
-		Range: []int{start, end},
-		Step:  step,
+		Range: []int{*minVal, *maxVal},
+		Step:  *stepVal,
 	}
 	cfg.Search = append(cfg.Search, searchVar)
 
-	// 3. Handle Fixed Values (Defaults)
-	// If we are NOT searching "workers", we fix workers to -max-workers (or -queue-depth for legacy reasons?)
-	// Actually, the legacy engine used -max-workers as the fixed count when searching queue_depth.
-	// But `CoordinateOptimizer` defaults to the midpoint of a range or we can inject a fixed variable.
-	// We can add fixed variables as single-value ranges.
-	
+	// 3. Handle Fixed Values
 	if *varName != "workers" {
 		cfg.Search = append(cfg.Search, config.Variable{
-			Name: "workers", Values: []int{*maxWorkers},
+			Name: "workers", Values: []int{*workers},
 		})
 	}
 	if *varName != "queue_depth" {
@@ -111,6 +93,7 @@ func runLegacyFlags() {
 			Name: "block_size", Values: []int{*bs},
 		})
 	}
+
 
 	fmt.Printf("Starting jolt optimization on %s varying %s...\n", *path, *varName)
 	
