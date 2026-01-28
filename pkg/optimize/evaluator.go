@@ -37,6 +37,10 @@ func NewEvaluator(eng engine.Engine, cfg *config.Config) *Evaluator {
 	}
 }
 
+func (e *Evaluator) NumNodes() int {
+	return e.eng.NumNodes()
+}
+
 func (e *Evaluator) Evaluate(s State) (engine.Result, float64, string, error) {
 	p := engine.Params{
 		EngineType:  e.cfg.Settings.EngineType,

@@ -83,6 +83,13 @@ func (co *CoordinateOptimizer) Optimize() (State, engine.Result, error) {
 	return current, bestRes, nil
 }
 
+func (co *CoordinateOptimizer) formatVal(name string, val int) string {
+	if nodes := co.eval.NumNodes(); nodes > 1 {
+		return fmt.Sprintf("%s=%d (Total, ~%.1f/node)", name, val, float64(val)/float64(nodes))
+	}
+	return fmt.Sprintf("%s=%d", name, val)
+}
+
 func (co *CoordinateOptimizer) optimizeList(s State, v config.Variable) (int, engine.Result, float64, error) {
 	bestVal := s[v.Name]
 	var bestRes engine.Result
@@ -94,9 +101,9 @@ func (co *CoordinateOptimizer) optimizeList(s State, v config.Variable) (int, en
 	for _, val := range v.Values {
 		tempState[v.Name] = val
 		res, score, reason, err := co.eval.Evaluate(tempState)
-		if err != nil { return 0, engine.Result{}, 0, err } 
+		if err != nil { return 0, engine.Result{}, 0, err }
 		
-		fmt.Printf("  Testing %s=%d... Score: %.2f (%s) %s\n", v.Name, val, score, co.eval.FormatMetrics(res), reason)
+		fmt.Printf("  Testing %s... Score: %.2f (%s) %s\n", co.formatVal(v.Name, val), score, co.eval.FormatMetrics(res), reason)
 		if score > bestScore || bestRes.IOPS == 0 {
 			bestScore = score
 			bestRes = res
@@ -127,7 +134,7 @@ func (co *CoordinateOptimizer) optimizeRange(s State, v config.Variable) (int, e
 			tempState[v.Name] = bestVal + step
 			r, s, reason, err := co.eval.Evaluate(tempState)
 			if err != nil { return 0, engine.Result{}, 0, err }
-			fmt.Printf("  Testing %s=%d... Score: %.2f (%s) %s\n", v.Name, tempState[v.Name], s, co.eval.FormatMetrics(r), reason)
+			fmt.Printf("  Testing %s... Score: %.2f (%s) %s\n", co.formatVal(v.Name, tempState[v.Name]), s, co.eval.FormatMetrics(r), reason)
 			if s > bestScore {
 				bestScore = s
 				bestRes = r
@@ -140,7 +147,7 @@ func (co *CoordinateOptimizer) optimizeRange(s State, v config.Variable) (int, e
 			tempState[v.Name] = bestVal - step
 			r, s, reason, err := co.eval.Evaluate(tempState)
 			if err != nil { return 0, engine.Result{}, 0, err }
-			fmt.Printf("  Testing %s=%d... Score: %.2f (%s) %s\n", v.Name, tempState[v.Name], s, co.eval.FormatMetrics(r), reason)
+			fmt.Printf("  Testing %s... Score: %.2f (%s) %s\n", co.formatVal(v.Name, tempState[v.Name]), s, co.eval.FormatMetrics(r), reason)
 			if s > bestScore {
 				bestScore = s
 				bestRes = r
@@ -148,7 +155,6 @@ func (co *CoordinateOptimizer) optimizeRange(s State, v config.Variable) (int, e
 				improved = true
 			}
 		}
-
 		if improved {
 			// If we improved, keep the same step size and try again from new position
 			continue

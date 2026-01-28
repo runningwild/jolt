@@ -22,6 +22,7 @@ type Result struct {
 // Engine defines the interface for different I/O execution strategies.
 type Engine interface {
 	Run(params Params) (*Result, error)
+	NumNodes() int
 }
 
 // Params defines the parameters for an I/O workload.

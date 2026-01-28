@@ -93,8 +93,13 @@ func (s *Sweeper) Run() ([]optimize.HistoryEntry, analyze.Point, error) {
 			return nil, analyze.Point{}, err
 		}
 
-		fmt.Printf("[%d/%d] %s=%d -> IOPS: %.0f, Latency: %v\n", 
-			i+1, len(steps), sweepVar.Name, val, res.IOPS, res.P99Latency)
+		suffix := ""
+		if nodes := s.eval.NumNodes(); nodes > 1 {
+			suffix = fmt.Sprintf(" (Cluster Total, ~%.1f/node)", float64(val)/float64(nodes))
+		}
+
+		fmt.Printf("[%d/%d] %s=%d%s -> IOPS: %.0f, Latency: %v\n", 
+			i+1, len(steps), sweepVar.Name, val, suffix, res.IOPS, res.P99Latency)
 
 		results = append(results, optimize.HistoryEntry{
 			State: copyState(state),

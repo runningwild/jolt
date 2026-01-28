@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/runningwild/jolt/pkg/stats"
+	"github.com/HdrHistogram/hdrhistogram-go"
 	"golang.org/x/sys/unix"
 )
 
@@ -22,6 +22,8 @@ type SyncEngine struct {
 func NewSync() *SyncEngine {
 	return &SyncEngine{}
 }
+
+func (e *SyncEngine) NumNodes() int { return 1 }
 
 // New returns an Engine of the requested type.
 func New(engineType string) Engine {
@@ -171,7 +173,7 @@ func calculateStats(samples []float64) (mean float64, stdErr float64) {
 
 type workerResult struct {
 	ioCount   int64
-	hist      *stats.Histogram
+	hist      *hdrhistogram.Histogram
 	err       error
 }
 
@@ -210,7 +212,7 @@ func (e *SyncEngine) runWorker(id int, params Params, tokens chan struct{}, done
 	}
 
 	var ioCount int64
-	hist := stats.NewHistogram()
+	hist := hdrhistogram.New(1, 3600000000, 3)
 	
 	r := rand.New(rand.NewSource(time.Now().UnixNano() + int64(id)))
 
@@ -248,7 +250,7 @@ func (e *SyncEngine) runWorker(id int, params Params, tokens chan struct{}, done
 		// Release token
 		tokens <- struct{}{}
 		
-		hist.Record(time.Since(ioStart).Microseconds())
+		_ = hist.RecordValue(time.Since(ioStart).Microseconds())
 		
 		if err != nil && err != io.EOF {
 			return workerResult{err: err}
@@ -262,7 +264,7 @@ func (e *SyncEngine) runWorker(id int, params Params, tokens chan struct{}, done
 
 func (e *SyncEngine) aggregate(results chan workerResult, duration time.Duration, relErr float64) (*Result, error) {
 	var totalIOs int64
-	hist := stats.NewHistogram()
+	hist := hdrhistogram.New(1, 3600000000, 3)
 	var firstErr error
 
 	for res := range results {
@@ -288,10 +290,10 @@ func (e *SyncEngine) aggregate(results chan workerResult, duration time.Duration
 		IOPS:             float64(totalIOs) / duration.Seconds(),
 		Throughput:       0, // Calculated in Run
 		MeanLatency:      time.Duration(hist.Mean() * float64(time.Microsecond)),
-		P50Latency:       time.Duration(hist.ValueAtQuantile(0.50)) * time.Microsecond,
-		P95Latency:       time.Duration(hist.ValueAtQuantile(0.95)) * time.Microsecond,
-		P99Latency:       time.Duration(hist.ValueAtQuantile(0.99)) * time.Microsecond,
-		P999Latency:      time.Duration(hist.ValueAtQuantile(0.999)) * time.Microsecond,
+		P50Latency:       time.Duration(hist.ValueAtQuantile(50.0)) * time.Microsecond,
+		P95Latency:       time.Duration(hist.ValueAtQuantile(95.0)) * time.Microsecond,
+		P99Latency:       time.Duration(hist.ValueAtQuantile(99.0)) * time.Microsecond,
+		P999Latency:      time.Duration(hist.ValueAtQuantile(99.9)) * time.Microsecond,
 		TotalIOs:         totalIOs,
 		Duration:         duration,
 		MetricConfidence: relErr,

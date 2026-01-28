@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/runningwild/jolt/pkg/stats"
+	"github.com/HdrHistogram/hdrhistogram-go"
 	"github.com/godzie44/go-uring/uring"
 	"golang.org/x/sys/unix"
 )
@@ -22,6 +22,8 @@ type UringEngine struct {
 func NewUring() *UringEngine {
 	return &UringEngine{}
 }
+
+func (e *UringEngine) NumNodes() int { return 1 }
 
 func (e *UringEngine) Run(params Params) (*Result, error) {
 	if params.BlockSize <= 0 {
@@ -186,7 +188,7 @@ func (e *UringEngine) runUringWorker(id int, params Params, qd int, done chan st
 
 	var ioCount int64
 	// Use Histogram to avoid OOM
-	hist := stats.NewHistogram()
+	hist := hdrhistogram.New(1, 3600000000, 3)
 
 	freeSlots := make([]int, qd)
 	for i := 0; i < qd; i++ {
@@ -253,7 +255,7 @@ func (e *UringEngine) runUringWorker(id int, params Params, qd int, done chan st
 				return workerResult{err: syscall.Errno(-cqe.Res)}
 			}
 			
-			hist.Record(time.Since(startTimes[slotIdx]).Microseconds())
+			_ = hist.RecordValue(time.Since(startTimes[slotIdx]).Microseconds())
 			ioCount++
 			atomic.AddInt64(opsCounter, 1)
 			inFlight--

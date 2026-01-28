@@ -22,6 +22,8 @@ func New(nodes []string) *ClusterEngine {
 	}
 }
 
+func (c *ClusterEngine) NumNodes() int { return len(c.nodes) }
+
 func (c *ClusterEngine) Run(params engine.Params) (*engine.Result, error) {
 	var wg sync.WaitGroup
 	results := make([]*engine.Result, len(c.nodes))
