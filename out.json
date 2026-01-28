@@ -1,0 +1,674 @@
+[
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 1,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 5593.606479006813,
+      "Throughput": 22911412.138011906,
+      "MeanLatency": 177106,
+      "P50Latency": 174000,
+      "P95Latency": 189000,
+      "P99Latency": 197000,
+      "P999Latency": 404000,
+      "TotalIOs": 5596,
+      "Duration": 1000427903,
+      "MetricConfidence": 0.00903914084072453,
+      "TerminationReason": "Converged"
+    },
+    "score": 1000
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 2,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 10886.007686865058,
+      "Throughput": 44589087.485399276,
+      "MeanLatency": 181934,
+      "P50Latency": 176000,
+      "P95Latency": 230000,
+      "P99Latency": 259000,
+      "P999Latency": 366000,
+      "TotalIOs": 10889,
+      "Duration": 1000274877,
+      "MetricConfidence": 0.004141700034051039,
+      "TerminationReason": "Converged"
+    },
+    "score": 1946.1518660136333
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 3,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 12772.479019820106,
+      "Throughput": 52316074.065183155,
+      "MeanLatency": 232806,
+      "P50Latency": 232000,
+      "P95Latency": 300000,
+      "P99Latency": 339000,
+      "P999Latency": 415000,
+      "TotalIOs": 12790,
+      "Duration": 1001371776,
+      "MetricConfidence": 0.014074310247847981,
+      "TerminationReason": "Converged"
+    },
+    "score": 2283.406790906027
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 4,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 15710.360048684508,
+      "Throughput": 64349634.759411745,
+      "MeanLatency": 252587,
+      "P50Latency": 243000,
+      "P95Latency": 329000,
+      "P99Latency": 375000,
+      "P999Latency": 433000,
+      "TotalIOs": 15721,
+      "Duration": 1000677257,
+      "MetricConfidence": 0.00481031368650369,
+      "TerminationReason": "Converged"
+    },
+    "score": 2808.62804840608
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 5,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 18911.71875252298,
+      "Throughput": 77462400.01033412,
+      "MeanLatency": 261581,
+      "P50Latency": 251000,
+      "P95Latency": 355000,
+      "P99Latency": 409000,
+      "P999Latency": 520000,
+      "TotalIOs": 18921,
+      "Duration": 1000490767,
+      "MetricConfidence": 0.0070689174610341155,
+      "TerminationReason": "Converged"
+    },
+    "score": 3380.9526686405184
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 6,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 21753.214673873277,
+      "Throughput": 89101167.30418494,
+      "MeanLatency": 273643,
+      "P50Latency": 262000,
+      "P95Latency": 382000,
+      "P99Latency": 444000,
+      "P999Latency": 536000,
+      "TotalIOs": 21765,
+      "Duration": 1000541774,
+      "MetricConfidence": 0.007541094602113255,
+      "TerminationReason": "Converged"
+    },
+    "score": 3888.9426268212783
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 7,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 24148.702492823624,
+      "Throughput": 98913085.41060556,
+      "MeanLatency": 287683,
+      "P50Latency": 275000,
+      "P95Latency": 412000,
+      "P99Latency": 487000,
+      "P999Latency": 589000,
+      "TotalIOs": 24162,
+      "Duration": 1000550651,
+      "MetricConfidence": 0.00742325081937252,
+      "TerminationReason": "Converged"
+    },
+    "score": 4317.197247152682
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 8,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 26605.01993422169,
+      "Throughput": 108974161.65057205,
+      "MeanLatency": 298365,
+      "P50Latency": 284000,
+      "P95Latency": 440000,
+      "P99Latency": 531000,
+      "P999Latency": 648000,
+      "TotalIOs": 26621,
+      "Duration": 1000600641,
+      "MetricConfidence": 0.008497729228598708,
+      "TerminationReason": "Converged"
+    },
+    "score": 4756.32671588038
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 9,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 28381.809332812976,
+      "Throughput": 116251891.02720195,
+      "MeanLatency": 314776,
+      "P50Latency": 298000,
+      "P95Latency": 473000,
+      "P99Latency": 565000,
+      "P999Latency": 670000,
+      "TotalIOs": 28412,
+      "Duration": 1001063733,
+      "MetricConfidence": 0.008460250259073333,
+      "TerminationReason": "Converged"
+    },
+    "score": 5073.973194097913
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 10,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30407.7405167126,
+      "Throughput": 124550105.15645482,
+      "MeanLatency": 327493,
+      "P50Latency": 309000,
+      "P95Latency": 503000,
+      "P99Latency": 612000,
+      "P999Latency": 732000,
+      "TotalIOs": 30426,
+      "Duration": 1000600488,
+      "MetricConfidence": 0.006604771223917459,
+      "TerminationReason": "Converged"
+    },
+    "score": 5436.160128681724
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 11,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30352.555141328783,
+      "Throughput": 124324065.8588827,
+      "MeanLatency": 327937,
+      "P50Latency": 310000,
+      "P95Latency": 503000,
+      "P99Latency": 608000,
+      "P999Latency": 757000,
+      "TotalIOs": 30402,
+      "Duration": 1001629018,
+      "MetricConfidence": 0.00383148693284425,
+      "TerminationReason": "Converged"
+    },
+    "score": 5426.2943335831715
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 12,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30427.653986085836,
+      "Throughput": 124631670.72700758,
+      "MeanLatency": 326826,
+      "P50Latency": 310000,
+      "P95Latency": 498000,
+      "P99Latency": 602000,
+      "P999Latency": 721000,
+      "TotalIOs": 30470,
+      "Duration": 1001391695,
+      "MetricConfidence": 0.005216302611981515,
+      "TerminationReason": "Converged"
+    },
+    "score": 5439.720169855155
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 13,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30461.54422661453,
+      "Throughput": 124770485.15221311,
+      "MeanLatency": 326955,
+      "P50Latency": 310000,
+      "P95Latency": 500000,
+      "P99Latency": 607000,
+      "P999Latency": 738000,
+      "TotalIOs": 30490,
+      "Duration": 1000934154,
+      "MetricConfidence": 0.006143846941673337,
+      "TerminationReason": "Converged"
+    },
+    "score": 5445.778915792304
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 14,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30781.80492690809,
+      "Throughput": 126082272.98061554,
+      "MeanLatency": 323642,
+      "P50Latency": 306000,
+      "P95Latency": 497000,
+      "P99Latency": 609000,
+      "P999Latency": 724000,
+      "TotalIOs": 30841,
+      "Duration": 1001923054,
+      "MetricConfidence": 0.008331706756104984,
+      "TerminationReason": "Converged"
+    },
+    "score": 5503.033694349844
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 15,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30553.034100331555,
+      "Throughput": 125145227.67495805,
+      "MeanLatency": 325049,
+      "P50Latency": 308000,
+      "P95Latency": 499000,
+      "P99Latency": 605000,
+      "P999Latency": 733000,
+      "TotalIOs": 30587,
+      "Duration": 1001111703,
+      "MetricConfidence": 0.004988885053539027,
+      "TerminationReason": "Converged"
+    },
+    "score": 5462.135067062579
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 16,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30643.22595180123,
+      "Throughput": 125514653.49857783,
+      "MeanLatency": 324906,
+      "P50Latency": 307000,
+      "P95Latency": 501000,
+      "P99Latency": 613000,
+      "P999Latency": 761000,
+      "TotalIOs": 30719,
+      "Duration": 1002472783,
+      "MetricConfidence": 0.007736511995851876,
+      "TerminationReason": "Converged"
+    },
+    "score": 5478.259163709022
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 17,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30498.047551932803,
+      "Throughput": 124920002.77271676,
+      "MeanLatency": 326529,
+      "P50Latency": 308000,
+      "P95Latency": 502000,
+      "P99Latency": 613000,
+      "P999Latency": 751000,
+      "TotalIOs": 30550,
+      "Duration": 1001703468,
+      "MetricConfidence": 0.005335624780294382,
+      "TerminationReason": "Converged"
+    },
+    "score": 5452.304817364979
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 18,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30314.524902899153,
+      "Throughput": 124168294.00227493,
+      "MeanLatency": 328476,
+      "P50Latency": 310000,
+      "P95Latency": 505000,
+      "P99Latency": 607000,
+      "P999Latency": 762000,
+      "TotalIOs": 30374,
+      "Duration": 1001961934,
+      "MetricConfidence": 0.00760716541819386,
+      "TerminationReason": "Converged"
+    },
+    "score": 5419.495457299622
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 19,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30356.43097364544,
+      "Throughput": 124339941.26805173,
+      "MeanLatency": 327953,
+      "P50Latency": 309000,
+      "P95Latency": 507000,
+      "P99Latency": 618000,
+      "P999Latency": 775000,
+      "TotalIOs": 30393,
+      "Duration": 1001204655,
+      "MetricConfidence": 0.008304261684178105,
+      "TerminationReason": "Converged"
+    },
+    "score": 5426.987237585482
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 20,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30339.49937745216,
+      "Throughput": 124270589.45004405,
+      "MeanLatency": 327970,
+      "P50Latency": 310000,
+      "P95Latency": 506000,
+      "P99Latency": 615000,
+      "P999Latency": 749000,
+      "TotalIOs": 30386,
+      "Duration": 1001532676,
+      "MetricConfidence": 0.006674273358135368,
+      "TerminationReason": "Converged"
+    },
+    "score": 5423.96028238997
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 21,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30450.4551016955,
+      "Throughput": 124725064.09654477,
+      "MeanLatency": 326931,
+      "P50Latency": 309000,
+      "P95Latency": 501000,
+      "P99Latency": 602000,
+      "P999Latency": 732000,
+      "TotalIOs": 30483,
+      "Duration": 1001068782,
+      "MetricConfidence": 0.006819166178629136,
+      "TerminationReason": "Converged"
+    },
+    "score": 5443.796451534111
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 22,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 29977.159143407953,
+      "Throughput": 122786443.85139897,
+      "MeanLatency": 332153,
+      "P50Latency": 314000,
+      "P95Latency": 513000,
+      "P99Latency": 631000,
+      "P999Latency": 805000,
+      "TotalIOs": 30000,
+      "Duration": 1000761942,
+      "MetricConfidence": 0.004351413416665291,
+      "TerminationReason": "Converged"
+    },
+    "score": 5359.182712604877
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 23,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30303.800136449918,
+      "Throughput": 124124365.35889886,
+      "MeanLatency": 328440,
+      "P50Latency": 310000,
+      "P95Latency": 505000,
+      "P99Latency": 615000,
+      "P999Latency": 801000,
+      "TotalIOs": 30370,
+      "Duration": 1002184540,
+      "MetricConfidence": 0.0077022841959423875,
+      "TerminationReason": "Converged"
+    },
+    "score": 5417.578131422393
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 24,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30321.472780638796,
+      "Throughput": 124196752.50949651,
+      "MeanLatency": 328255,
+      "P50Latency": 310000,
+      "P95Latency": 509000,
+      "P99Latency": 624000,
+      "P999Latency": 763000,
+      "TotalIOs": 30387,
+      "Duration": 1002161083,
+      "MetricConfidence": 0.00848857953980193,
+      "TerminationReason": "Converged"
+    },
+    "score": 5420.737567870989
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 25,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30293.144628430233,
+      "Throughput": 124080720.39805023,
+      "MeanLatency": 328581,
+      "P50Latency": 310000,
+      "P95Latency": 506000,
+      "P99Latency": 630000,
+      "P999Latency": 831000,
+      "TotalIOs": 30348,
+      "Duration": 1001810818,
+      "MetricConfidence": 0.009333376648879245,
+      "TerminationReason": "Converged"
+    },
+    "score": 5415.673187258073
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 26,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30538.428948259876,
+      "Throughput": 125085404.97207245,
+      "MeanLatency": 326293,
+      "P50Latency": 308000,
+      "P95Latency": 506000,
+      "P99Latency": 615000,
+      "P999Latency": 740000,
+      "TotalIOs": 30567,
+      "Duration": 1000935577,
+      "MetricConfidence": 0.008110685461132366,
+      "TerminationReason": "Converged"
+    },
+    "score": 5459.524023163353
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 27,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 29980.650062806882,
+      "Throughput": 122800742.65725699,
+      "MeanLatency": 328277,
+      "P50Latency": 309000,
+      "P95Latency": 503000,
+      "P99Latency": 616000,
+      "P999Latency": 768000,
+      "TotalIOs": 30034,
+      "Duration": 1001779479,
+      "MetricConfidence": 0.008128568046191857,
+      "TerminationReason": "Converged"
+    },
+    "score": 5359.806803593766
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 28,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30594.264746857745,
+      "Throughput": 125314108.40312932,
+      "MeanLatency": 325260,
+      "P50Latency": 307000,
+      "P95Latency": 501000,
+      "P99Latency": 606000,
+      "P999Latency": 749000,
+      "TotalIOs": 30657,
+      "Duration": 1002050556,
+      "MetricConfidence": 0.0051605841406017795,
+      "TerminationReason": "Converged"
+    },
+    "score": 5469.506098021036
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 29,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30495.793920586308,
+      "Throughput": 124910771.89872152,
+      "MeanLatency": 326621,
+      "P50Latency": 309000,
+      "P95Latency": 502000,
+      "P99Latency": 610000,
+      "P999Latency": 748000,
+      "TotalIOs": 30546,
+      "Duration": 1001646328,
+      "MetricConfidence": 0.0088489780645094,
+      "TerminationReason": "Converged"
+    },
+    "score": 5451.901923211635
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 30,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30388.99703618258,
+      "Throughput": 124473331.86020385,
+      "MeanLatency": 327684,
+      "P50Latency": 310000,
+      "P95Latency": 506000,
+      "P99Latency": 609000,
+      "P999Latency": 769000,
+      "TotalIOs": 30450,
+      "Duration": 1002007403,
+      "MetricConfidence": 0.008812458603397695,
+      "TerminationReason": "Converged"
+    },
+    "score": 5432.809252891594
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 31,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30363.882391685533,
+      "Throughput": 124370462.27634394,
+      "MeanLatency": 327757,
+      "P50Latency": 311000,
+      "P95Latency": 504000,
+      "P99Latency": 607000,
+      "P999Latency": 725000,
+      "TotalIOs": 30418,
+      "Duration": 1001782302,
+      "MetricConfidence": 0.007519299713552226,
+      "TerminationReason": "Converged"
+    },
+    "score": 5428.319368844279
+  },
+  {
+    "state": {
+      "block_size": 4096,
+      "queue_depth": 32,
+      "workers": 10
+    },
+    "result": {
+      "IOPS": 30241.644824754636,
+      "Throughput": 123869777.20219499,
+      "MeanLatency": 329227,
+      "P50Latency": 312000,
+      "P95Latency": 502000,
+      "P99Latency": 609000,
+      "P999Latency": 749000,
+      "TotalIOs": 30279,
+      "Duration": 1001235223,
+      "MetricConfidence": 0.006075453835098362,
+      "TerminationReason": "Converged"
+    },
+    "score": 5406.466282219458
+  }
+]
