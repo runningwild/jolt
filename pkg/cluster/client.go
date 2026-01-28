@@ -30,12 +30,38 @@ func (c *ClusterEngine) Run(params engine.Params) (*engine.Result, error) {
 	// Fan out
 	for i, node := range c.nodes {
 		wg.Add(1)
-		go func(idx int, host string) {
+		
+		// Calculate per-node params
+		nodeParams := params
+		if params.Distribute {
+			// Workers
+			baseW := params.Workers / len(c.nodes)
+			remW := params.Workers % len(c.nodes)
+			if i < remW {
+				nodeParams.Workers = baseW + 1
+			} else {
+				nodeParams.Workers = baseW
+			}
+			
+			// Queue Depth
+			baseQD := params.QueueDepth / len(c.nodes)
+			remQD := params.QueueDepth % len(c.nodes)
+			if i < remQD {
+				nodeParams.QueueDepth = baseQD + 1
+			} else {
+				nodeParams.QueueDepth = baseQD
+			}
+
+			// Sanity check: If 0 workers, we might want to skip this node or run with 0?
+			// Engine with 0 workers usually does nothing.
+		}
+
+		go func(idx int, host string, p engine.Params) {
 			defer wg.Done()
-			res, err := c.runRemote(host, params)
+			res, err := c.runRemote(host, p)
 			results[idx] = res
 			errors[idx] = err
-		}(i, node)
+		}(i, node, nodeParams)
 	}
 	wg.Wait()
 

@@ -22,6 +22,7 @@ type Settings struct {
 	ReadPct          int           `yaml:"read_pct"` // 0-100
 	Write_Deprecated bool          `yaml:"write"`    // Deprecated: use read_pct
 	Rand             bool          `yaml:"rand"`
+	Distribute       bool          `yaml:"distribute"` // If true, workers/QD are split among nodes
 	MinRuntime       time.Duration `yaml:"min_runtime"`
 	MaxRuntime       time.Duration `yaml:"max_runtime"`
 	ErrorTarget      float64       `yaml:"error_target"`

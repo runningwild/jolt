@@ -32,6 +32,7 @@ type Params struct {
 	Direct     bool          // Use O_DIRECT
 	ReadPct    int           // Percentage of operations that are reads (0-100)
 	Rand       bool          // True for random, false for sequential
+	Distribute bool          // If true, workers/QD are split among nodes (Cluster only)
 	Workers    int           // Number of concurrent workers (goroutines or async loops)
 	QueueDepth int           // Global target queue depth (token bucket size)
 	MinRuntime time.Duration // Minimum time to run the test

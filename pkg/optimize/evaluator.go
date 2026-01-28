@@ -47,6 +47,7 @@ func (e *Evaluator) Evaluate(s State) (engine.Result, float64, string, error) {
 		MinRuntime:  e.cfg.Settings.MinRuntime,
 		MaxRuntime:  e.cfg.Settings.MaxRuntime,
 		ErrorTarget: e.cfg.Settings.ErrorTarget,
+		Distribute:  e.cfg.Settings.Distribute,
 		BlockSize:   4096,
 		Workers:     1,
 		QueueDepth:  1,
