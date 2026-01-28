@@ -1,0 +1,126 @@
+package cluster
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/runningwild/jolt/pkg/engine"
+)
+
+type ClusterEngine struct {
+	nodes []string
+}
+
+func New(nodes []string) *ClusterEngine {
+	return &ClusterEngine{
+		nodes: nodes,
+	}
+}
+
+func (c *ClusterEngine) Run(params engine.Params) (*engine.Result, error) {
+	var wg sync.WaitGroup
+	results := make([]*engine.Result, len(c.nodes))
+	errors := make([]error, len(c.nodes))
+
+	// Fan out
+	for i, node := range c.nodes {
+		wg.Add(1)
+		go func(idx int, host string) {
+			defer wg.Done()
+			res, err := c.runRemote(host, params)
+			results[idx] = res
+			errors[idx] = err
+		}(i, node)
+	}
+	wg.Wait()
+
+	// Check errors
+	for i, err := range errors {
+		if err != nil {
+			return nil, fmt.Errorf("node %s failed: %v", c.nodes[i], err)
+		}
+	}
+
+	return c.aggregate(results), nil
+}
+
+func (c *ClusterEngine) runRemote(host string, params engine.Params) (*engine.Result, error) {
+	url := fmt.Sprintf("http://%s/run", host)
+	
+	data, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Timeout should be MaxRuntime + Buffer
+	timeout := params.MaxRuntime + 5*time.Second
+	if timeout < 10*time.Second { timeout = 10 * time.Second }
+	client := &http.Client{Timeout: timeout}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status %s", resp.Status)
+	}
+
+	var res engine.Result
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *ClusterEngine) aggregate(results []*engine.Result) *engine.Result {
+	agg := &engine.Result{}
+	var totalWeight float64
+
+	for _, r := range results {
+		if r == nil { continue }
+		
+		agg.TotalIOs += r.TotalIOs
+		agg.IOPS += r.IOPS
+		agg.Throughput += r.Throughput
+		
+		if r.Duration > agg.Duration {
+			agg.Duration = r.Duration
+		}
+		if r.MetricConfidence > agg.MetricConfidence {
+			agg.MetricConfidence = r.MetricConfidence
+		}
+		agg.TerminationReason = r.TerminationReason // Last one wins?
+
+		// Weighted aggregation for latencies
+		weight := float64(r.TotalIOs)
+		totalWeight += weight
+		
+		agg.MeanLatency += time.Duration(float64(r.MeanLatency) * weight)
+		agg.P50Latency += time.Duration(float64(r.P50Latency) * weight)
+		agg.P95Latency += time.Duration(float64(r.P95Latency) * weight)
+		agg.P99Latency += time.Duration(float64(r.P99Latency) * weight)
+		agg.P999Latency += time.Duration(float64(r.P999Latency) * weight)
+	}
+
+	if totalWeight > 0 {
+		agg.MeanLatency = time.Duration(float64(agg.MeanLatency) / totalWeight)
+		agg.P50Latency = time.Duration(float64(agg.P50Latency) / totalWeight)
+		agg.P95Latency = time.Duration(float64(agg.P95Latency) / totalWeight)
+		agg.P99Latency = time.Duration(float64(agg.P99Latency) / totalWeight)
+		agg.P999Latency = time.Duration(float64(agg.P999Latency) / totalWeight)
+	}
+
+	return agg
+}

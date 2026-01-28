@@ -5,10 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/runningwild/jolt/pkg/agent"
+	"github.com/runningwild/jolt/pkg/cluster"
 	"github.com/runningwild/jolt/pkg/config"
 	"github.com/runningwild/jolt/pkg/engine"
 	"github.com/runningwild/jolt/pkg/optimize"
@@ -24,6 +27,12 @@ func main() {
 			return
 		case "sweep":
 			runSweepCmd() // Explicit 'sweep' subcommand
+			return
+		case "agent":
+			runAgentCmd()
+			return
+		case "remote":
+			runRemoteCmd()
 			return
 		}
 	}
@@ -168,101 +177,345 @@ func (f *Flags) MaybeWriteConfig(cfg *config.Config) {
 }
 
 // runDefaultOptimize handles "jolt [flags]"
+
 func runDefaultOptimize() {
+
 	f := SetupFlags(flag.CommandLine)
+
 	flag.Parse()
 
+
+
 	if *f.ConfigFile == "" && *f.Path == "" {
+
 		// If neither config nor path is provided, print help
+
 		flag.Usage()
+
 		os.Exit(1)
+
 	}
 
-	runOptimizeLogic(f)
+
+
+	cfg, err := f.LoadConfig()
+
+	if err != nil {
+
+		fmt.Printf("Error: %v\n", err)
+
+		os.Exit(1)
+
+	}
+
+	f.MaybeWriteConfig(cfg)
+
+	eng := engine.New(cfg.Settings.EngineType)
+
+	runOptimizeLogic(f, cfg, eng)
+
 }
+
+
 
 // runOptimizerCmd handles "jolt optimize [flags]"
-func runOptimizerCmd() {
-	fs := flag.NewFlagSet("optimize", flag.ExitOnError)
-	f := SetupFlags(fs)
-	fs.Parse(os.Args[2:])
-	
-	runOptimizeLogic(f)
-}
 
-func runOptimizeLogic(f *Flags) {
+func runOptimizerCmd() {
+
+	fs := flag.NewFlagSet("optimize", flag.ExitOnError)
+
+	f := SetupFlags(fs)
+
+	fs.Parse(os.Args[2:])
+
+	
+
 	cfg, err := f.LoadConfig()
+
 	if err != nil {
+
 		fmt.Printf("Error: %v\n", err)
+
 		os.Exit(1)
+
 	}
 
 	f.MaybeWriteConfig(cfg)
+
+	eng := engine.New(cfg.Settings.EngineType)
+
+	runOptimizeLogic(f, cfg, eng)
+
+}
+
+
+
+func runOptimizeLogic(f *Flags, cfg *config.Config, eng engine.Engine) {
 
 	fmt.Printf("Optimizing %s using Coordinate Descent...\n", cfg.Target)
+
 	
-	eng := engine.New(cfg.Settings.EngineType)
+
 	optimizer := optimize.NewCoordinate(eng, cfg)
+
 	
+
 	bestState, bestRes, err := optimizer.Optimize()
+
 	if err != nil {
+
 		fmt.Printf("Optimization failed: %v\n", err)
+
 		os.Exit(1)
+
 	}
+
+
 
 	fmt.Printf("\n>>> Optimization Complete <<<\n")
+
 	fmt.Printf("Best State: %v\n", bestState)
+
 	fmt.Printf("Metrics:    IOPS=%.0f, Throughput=%.2f MB/s\n", bestRes.IOPS, bestRes.Throughput/1024/1024)
 
+
+
 	if *f.ReportFile != "" {
+
 		writeReport(*f.ReportFile, optimizer.GetHistory())
+
 	}
+
 }
 
+
+
 // runSweepCmd handles "jolt sweep [flags]"
+
 func runSweepCmd() {
+
 	fs := flag.NewFlagSet("sweep", flag.ExitOnError)
+
 	f := SetupFlags(fs)
+
 	fs.Parse(os.Args[2:])
 
+
+
 	cfg, err := f.LoadConfig()
+
 	if err != nil {
+
 		fmt.Printf("Error: %v\n", err)
+
 		os.Exit(1)
+
 	}
 
 	f.MaybeWriteConfig(cfg)
 
 	eng := engine.New(cfg.Settings.EngineType)
-	s := sweep.New(eng, cfg)
 
-	history, knee, err := s.Run()
-	if err != nil {
-		fmt.Printf("Sweep failed: %v\n", err)
-		os.Exit(1)
-	}
+	runSweepLogic(f, cfg, eng)
 
-	fmt.Printf("\n>>> Sweep Complete <<<\n")
-	if knee.OriginalX != nil {
-		fmt.Printf("Knee found at: %v (IOPS: %.0f)\n", knee.OriginalX, knee.Y)
-	} else {
-		fmt.Println("Could not identify a distinct knee.")
-	}
-
-	if *f.ReportFile != "" {
-		writeReport(*f.ReportFile, history)
-	}
 }
 
-func writeReport(path string, history []optimize.HistoryEntry) {
-	data, err := json.MarshalIndent(history, "", "  ")
+
+
+func runSweepLogic(f *Flags, cfg *config.Config, eng engine.Engine) {
+
+	s := sweep.New(eng, cfg)
+
+
+
+	history, knee, err := s.Run()
+
 	if err != nil {
+
+		fmt.Printf("Sweep failed: %v\n", err)
+
+		os.Exit(1)
+
+	}
+
+
+
+	fmt.Printf("\n>>> Sweep Complete <<<\n")
+
+	if knee.OriginalX != nil {
+
+		fmt.Printf("Knee found at: %v (IOPS: %.0f)\n", knee.OriginalX, knee.Y)
+
+	} else {
+
+		fmt.Println("Could not identify a distinct knee.")
+
+	}
+
+
+
+	if *f.ReportFile != "" {
+
+		writeReport(*f.ReportFile, history)
+
+	}
+
+}
+
+
+
+// runRemoteCmd handles "jolt remote [optimize|sweep] -nodes ..."
+
+func runRemoteCmd() {
+
+	if len(os.Args) < 3 {
+
+		fmt.Println("Usage: jolt remote <command> -nodes <host1,host2> [flags]")
+
+		os.Exit(1)
+
+	}
+
+	subCmd := os.Args[2]
+
+	
+
+	fs := flag.NewFlagSet("remote "+subCmd, flag.ExitOnError)
+
+	f := SetupFlags(fs)
+
+	nodesFlag := fs.String("nodes", "", "Comma-separated list of agent nodes (e.g. host1:9000,host2:9000)")
+
+	fs.Parse(os.Args[3:])
+
+	
+
+	if *nodesFlag == "" {
+
+		fmt.Println("Error: -nodes is required for remote mode")
+
+		os.Exit(1)
+
+	}
+
+	
+
+	cfg, err := f.LoadConfig()
+
+	if err != nil {
+
+		fmt.Printf("Error: %v\n", err)
+
+		os.Exit(1)
+
+	}
+
+	f.MaybeWriteConfig(cfg)
+
+	
+
+	nodes := strings.Split(*nodesFlag, ",")
+
+	fmt.Printf("Initializing Cluster Engine with %d nodes...\n", len(nodes))
+
+	eng := cluster.New(nodes)
+
+	
+
+	switch subCmd {
+
+	case "optimize":
+
+		runOptimizeLogic(f, cfg, eng)
+
+	case "sweep":
+
+		runSweepLogic(f, cfg, eng)
+
+	default:
+
+		fmt.Printf("Unknown remote command '%s'. Use 'optimize' or 'sweep'.\n", subCmd)
+
+        os.Exit(1)
+
+	}
+
+}
+
+
+
+func runAgentCmd() {
+
+
+
+	agentCmd := flag.NewFlagSet("agent", flag.ExitOnError)
+
+
+
+	port := agentCmd.Int("port", 9000, "Port to listen on")
+
+
+
+	path := agentCmd.String("path", "", "Target device/file path (overrides remote request)")
+
+
+
+	agentCmd.Parse(os.Args[2:])
+
+
+
+
+
+
+
+	srv := agent.NewServer("sync", *path) 
+
+
+
+	if err := srv.ListenAndServe(*port); err != nil {
+
+
+
+		fmt.Printf("Agent failed: %v\n", err)
+
+
+
+		os.Exit(1)
+
+
+
+	}
+
+
+
+}
+
+
+
+
+
+
+
+func writeReport(path string, history []optimize.HistoryEntry) {
+
+	data, err := json.MarshalIndent(history, "", "  ")
+
+	if err != nil {
+
 		fmt.Printf("Failed to marshal report: %v\n", err)
+
 		return
+
 	}
+
 	if err := os.WriteFile(path, data, 0644); err != nil {
+
 		fmt.Printf("Failed to write report: %v\n", err)
+
 		return
+
 	}
+
 	fmt.Printf("Report written to %s\n", path)
+
 }

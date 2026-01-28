@@ -5,9 +5,9 @@ settings:
   direct: true
   read_pct: 80
   rand: true    # Random I/O
-  min_runtime: 60s
-  max_runtime: 300s
-  error_target: 0.005
+  min_runtime: 20s
+  max_runtime: 200s
+  error_target: 0.01
 
 search:
   - variable: block_size
