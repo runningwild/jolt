@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/runningwild/jolt/pkg/engine"
 )
@@ -18,6 +19,26 @@ func NewServer(engType string, path string) *Server {
 		eng:  engine.New(engType),
 		path: path,
 	}
+}
+
+func (s *Server) VerifyAccess() error {
+	if s.path == "" {
+		return nil // Path provided by controller later
+	}
+
+	f, err := os.Open(s.path)
+	if err != nil {
+		return fmt.Errorf("failed to open %s: %w (check permissions?)", s.path, err)
+	}
+	defer f.Close()
+
+	buf := make([]byte, 4096)
+	if _, err := f.ReadAt(buf, 0); err != nil {
+		return fmt.Errorf("failed to read from %s: %w", s.path, err)
+	}
+	
+	fmt.Printf("Successfully verified read access to %s\n", s.path)
+	return nil
 }
 
 func (s *Server) ListenAndServe(port int) error {
@@ -66,6 +87,7 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 	
 	res, err := eng.Run(params)
 	if err != nil {
+		fmt.Printf("Error running engine: %v\n", err)
 		// If the test failed (e.g. disk error), we return 200 OK but with error in JSON?
 		// Or 500?
 		// Better to return 500 so the controller knows something went wrong at the system level.

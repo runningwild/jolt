@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -74,7 +75,8 @@ func (c *ClusterEngine) runRemote(host string, params engine.Params) (*engine.Re
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status %s", resp.Status)
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("agent %s error (%s): %s", host, resp.Status, string(bytes.TrimSpace(body)))
 	}
 
 	var res engine.Result

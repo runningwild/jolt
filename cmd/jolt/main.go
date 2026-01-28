@@ -390,17 +390,55 @@ func runRemoteCmd() {
 
 	
 
-	if *nodesFlag == "" {
-
-		fmt.Println("Error: -nodes is required for remote mode")
-
-		os.Exit(1)
-
-	}
+		if *nodesFlag == "" {
 
 	
 
-	cfg, err := f.LoadConfig()
+			fmt.Println("Error: -nodes is required for remote mode")
+
+	
+
+			os.Exit(1)
+
+	
+
+		}
+
+	
+
+		
+
+	
+
+		// In remote mode, path might be handled by agents. Inject dummy if missing to satisfy Config validation.
+
+	
+
+		if *f.Path == "" && *f.ConfigFile == "" {
+
+	
+
+			dummy := "REMOTE_MANAGED"
+
+	
+
+			f.Path = &dummy
+
+	
+
+		}
+
+	
+
+	
+
+	
+
+		cfg, err := f.LoadConfig()
+
+	
+
+	
 
 	if err != nil {
 
@@ -468,11 +506,63 @@ func runAgentCmd() {
 
 
 
-	srv := agent.NewServer("sync", *path) 
+		srv := agent.NewServer("sync", *path) 
 
 
 
-	if err := srv.ListenAndServe(*port); err != nil {
+
+
+
+
+		
+
+
+
+
+
+
+
+		if err := srv.VerifyAccess(); err != nil {
+
+
+
+
+
+
+
+			fmt.Printf("Agent Startup Error: %v\n", err)
+
+
+
+
+
+
+
+			os.Exit(1)
+
+
+
+
+
+
+
+		}
+
+
+
+
+
+
+
+	
+
+
+
+
+
+
+
+		if err := srv.ListenAndServe(*port); err != nil {
 
 
 
