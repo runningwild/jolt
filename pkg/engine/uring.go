@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/runningwild/jolt/pkg/stats"
 	"github.com/godzie44/go-uring/uring"
 	"golang.org/x/sys/unix"
 )
@@ -184,7 +185,8 @@ func (e *UringEngine) runUringWorker(id int, params Params, qd int, done chan st
 	r := rand.New(rand.NewSource(time.Now().UnixNano() + int64(id)))
 
 	var ioCount int64
-	latencies := make([]time.Duration, 0, 10000)
+	// Use Histogram to avoid OOM
+	hist := stats.NewHistogram()
 
 	freeSlots := make([]int, qd)
 	for i := 0; i < qd; i++ {
@@ -251,7 +253,7 @@ func (e *UringEngine) runUringWorker(id int, params Params, qd int, done chan st
 				return workerResult{err: syscall.Errno(-cqe.Res)}
 			}
 			
-			latencies = append(latencies, time.Since(startTimes[slotIdx]))
+			hist.Record(time.Since(startTimes[slotIdx]).Microseconds())
 			ioCount++
 			atomic.AddInt64(opsCounter, 1)
 			inFlight--
@@ -264,7 +266,7 @@ func (e *UringEngine) runUringWorker(id int, params Params, qd int, done chan st
 
 		select {
 		case <-done:
-			return workerResult{ioCount: ioCount, latencies: latencies}
+			return workerResult{ioCount: ioCount, hist: hist}
 		default:
 		}
 	}

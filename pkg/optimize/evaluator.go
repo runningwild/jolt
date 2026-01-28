@@ -70,6 +70,10 @@ func (e *Evaluator) Evaluate(s State) (engine.Result, float64, string, error) {
 		totalIOs := cached.TotalIOs + res.TotalIOs
 		
 		// Weighted average for latencies
+		// NOTE: Averaging percentiles is a statistical approximation and not mathematically correct.
+		// A true merge would require the raw histograms or full latency lists from both results.
+		// For the purpose of this heuristic optimizer, we accept this error to save memory/complexity,
+		// but be aware that merged P99 values may be slightly off compared to a fresh run of the same duration.
 		wOld := float64(cached.TotalIOs)
 		wNew := float64(res.TotalIOs)
 		totalW := wOld + wNew
@@ -120,6 +124,9 @@ func (e *Evaluator) hashState(s State) string {
 	// deterministic key
 	// Map iteration is random, so we must sort keys or hardcode known keys
 	// We only have 3 known keys
+	// NOTE: This explicitly ignores any other keys in the State map.
+	// If new tunable parameters are added to State, they MUST be added here
+	// or they will be ignored for caching purposes.
 	return fmt.Sprintf("bs=%d:qd=%d:w=%d", s["block_size"], s["queue_depth"], s["workers"])
 }
 
@@ -144,8 +151,8 @@ func (e *Evaluator) calculateScore(res engine.Result) (float64, string) {
 				actualDur = res.P50Latency
 				if res.P50Latency > limitVal { passed = false }
 			case "p95_latency":
-				actualDur = res.P99Latency // Fallback
-				if res.P99Latency > limitVal { passed = false }
+				actualDur = res.P95Latency
+				if res.P95Latency > limitVal { passed = false }
 			}
 			if !passed {
 				return 0, fmt.Sprintf("Constraint Failed: %s (%v > %s)", obj.Metric, actualDur, obj.Limit)

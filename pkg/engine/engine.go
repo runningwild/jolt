@@ -6,12 +6,12 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/runningwild/jolt/pkg/stats"
 	"golang.org/x/sys/unix"
 )
 
@@ -171,7 +171,7 @@ func calculateStats(samples []float64) (mean float64, stdErr float64) {
 
 type workerResult struct {
 	ioCount   int64
-	latencies []time.Duration
+	hist      *stats.Histogram
 	err       error
 }
 
@@ -210,14 +210,14 @@ func (e *SyncEngine) runWorker(id int, params Params, tokens chan struct{}, done
 	}
 
 	var ioCount int64
-	latencies := make([]time.Duration, 0, 10000)
+	hist := stats.NewHistogram()
 	
 	r := rand.New(rand.NewSource(time.Now().UnixNano() + int64(id)))
 
 	for {
 		select {
 		case <-done:
-			return workerResult{ioCount: ioCount, latencies: latencies}
+			return workerResult{ioCount: ioCount, hist: hist}
 		case <-tokens:
 			// Acquired token
 		}
@@ -248,7 +248,7 @@ func (e *SyncEngine) runWorker(id int, params Params, tokens chan struct{}, done
 		// Release token
 		tokens <- struct{}{}
 		
-		latencies = append(latencies, time.Since(ioStart))
+		hist.Record(time.Since(ioStart).Microseconds())
 		
 		if err != nil && err != io.EOF {
 			return workerResult{err: err}
@@ -261,93 +261,39 @@ func (e *SyncEngine) runWorker(id int, params Params, tokens chan struct{}, done
 }
 
 func (e *SyncEngine) aggregate(results chan workerResult, duration time.Duration, relErr float64) (*Result, error) {
-
 	var totalIOs int64
-
-	var allLatencies []time.Duration
-
+	hist := stats.NewHistogram()
 	var firstErr error
 
-	var totalLatency time.Duration
-
-
-
 	for res := range results {
-
 		if res.err != nil {
-
 			if firstErr == nil {
-
 				firstErr = res.err
-
 			}
-
 			continue
-
 		}
-
 		totalIOs += res.ioCount
-
-		allLatencies = append(allLatencies, res.latencies...)
-
-		for _, l := range res.latencies {
-
-			totalLatency += l
-
-		}
-
+		hist.Merge(res.hist)
 	}
-
-
 
 	if firstErr != nil {
-
 		return nil, firstErr
-
 	}
 
-
-
-	if len(allLatencies) == 0 {
-
+	if totalIOs == 0 {
 		return &Result{Duration: duration, MetricConfidence: relErr}, nil
-
 	}
-
-
-
-	sort.Slice(allLatencies, func(i, j int) bool {
-
-		return allLatencies[i] < allLatencies[j]
-
-	})
-
-
-
-	n := len(allLatencies)
 
 	return &Result{
-
 		IOPS:             float64(totalIOs) / duration.Seconds(),
-
 		Throughput:       0, // Calculated in Run
-
-		MeanLatency:      totalLatency / time.Duration(n),
-
-		P50Latency:       allLatencies[n/2],
-
-		P95Latency:       allLatencies[int(float64(n)*0.95)],
-
-		P99Latency:       allLatencies[int(float64(n)*0.99)],
-
-		P999Latency:      allLatencies[int(float64(n)*0.999)],
-
+		MeanLatency:      time.Duration(hist.Mean() * float64(time.Microsecond)),
+		P50Latency:       time.Duration(hist.ValueAtQuantile(0.50)) * time.Microsecond,
+		P95Latency:       time.Duration(hist.ValueAtQuantile(0.95)) * time.Microsecond,
+		P99Latency:       time.Duration(hist.ValueAtQuantile(0.99)) * time.Microsecond,
+		P999Latency:      time.Duration(hist.ValueAtQuantile(0.999)) * time.Microsecond,
 		TotalIOs:         totalIOs,
-
 		Duration:         duration,
-
 		MetricConfidence: relErr,
-
 	}, nil
-
 }
