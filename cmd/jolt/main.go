@@ -54,7 +54,6 @@ type Flags struct {
 	Direct      *bool
 	ReadPct     *int
 	RandIO      *bool
-	Distribute  *bool
 	MinRuntime  *time.Duration
 	MaxRuntime  *time.Duration
 	ErrorTarget *float64
@@ -80,13 +79,11 @@ func SetupFlags(fs *flag.FlagSet) *Flags {
 	f.EngineType = fs.String("engine", "sync", "I/O engine: 'sync' or 'uring'")
 	f.BS = fs.Int("bs", 4096, "Block size")
 	f.Direct = fs.Bool("direct", true, "Use O_DIRECT")
-		f.ReadPct = fs.Int("read-pct", 100, "Read percentage (0-100)")
-		f.RandIO = fs.Bool("rand", true, "Random I/O (default is sequential)")
-		f.Distribute = fs.Bool("distribute", false, "Distribute workers/QD across cluster (true=Total, false=Per-Node)")
-		
-		f.MinRuntime = fs.Duration("min-runtime", 1*time.Second, "Minimum runtime for each test point")
-	
-	f.MaxRuntime = fs.Duration("max-runtime", 5*time.Second, "Maximum runtime for each test point")
+			f.ReadPct = fs.Int("read-pct", 100, "Read percentage (0-100)")
+			f.RandIO = fs.Bool("rand", true, "Random I/O (default is sequential)")
+			
+			f.MinRuntime = fs.Duration("min-runtime", 1*time.Second, "Minimum runtime for each test point")
+			f.MaxRuntime = fs.Duration("max-runtime", 5*time.Second, "Maximum runtime for each test point")
 	f.ErrorTarget = fs.Float64("error", 0.05, "Target relative error (stdErr/mean), e.g., 0.05 for 5%")
 
 	f.VarName = fs.String("var", "workers", "Variable to optimize: 'workers', 'queue_depth', 'block_size'")
@@ -125,7 +122,6 @@ func (f *Flags) LoadConfig() (*config.Config, error) {
 			Direct:      *f.Direct,
 			ReadPct:     *f.ReadPct,
 			Rand:        *f.RandIO,
-			Distribute:  *f.Distribute,
 			MinRuntime:  *f.MinRuntime,
 			MaxRuntime:  *f.MaxRuntime,
 			ErrorTarget: *f.ErrorTarget,

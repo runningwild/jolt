@@ -33,17 +33,18 @@ func (c *ClusterEngine) Run(params engine.Params) (*engine.Result, error) {
 		
 		// Calculate per-node params
 		nodeParams := params
-		if params.Distribute {
-			// Workers
-			baseW := params.Workers / len(c.nodes)
-			remW := params.Workers % len(c.nodes)
-			if i < remW {
-				nodeParams.Workers = baseW + 1
-			} else {
-				nodeParams.Workers = baseW
-			}
-			
-			// Queue Depth
+		
+		// Always distribute Workers
+		baseW := params.Workers / len(c.nodes)
+		remW := params.Workers % len(c.nodes)
+		if i < remW {
+			nodeParams.Workers = baseW + 1
+		} else {
+			nodeParams.Workers = baseW
+		}
+		
+		// Distribute QueueDepth only if explicitly set (> 0)
+		if params.QueueDepth > 0 {
 			baseQD := params.QueueDepth / len(c.nodes)
 			remQD := params.QueueDepth % len(c.nodes)
 			if i < remQD {
@@ -52,8 +53,18 @@ func (c *ClusterEngine) Run(params engine.Params) (*engine.Result, error) {
 				nodeParams.QueueDepth = baseQD
 			}
 
-			// Sanity check: If 0 workers, we might want to skip this node or run with 0?
-			// Engine with 0 workers usually does nothing.
+			// If distributed QD is 0, DO NOT RUN this node.
+			// Otherwise the engine will default QD = Workers, causing huge phantom load.
+			if nodeParams.QueueDepth == 0 {
+				wg.Done() // Skip
+				continue
+			}
+		}
+
+		// If distributed Workers is 0, DO NOT RUN this node.
+		if nodeParams.Workers == 0 {
+			wg.Done() // Skip
+			continue
 		}
 
 		go func(idx int, host string, p engine.Params) {
