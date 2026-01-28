@@ -10,12 +10,19 @@ import (
 	"github.com/runningwild/jolt/pkg/config"
 	"github.com/runningwild/jolt/pkg/engine"
 	"github.com/runningwild/jolt/pkg/optimize"
+	"github.com/runningwild/jolt/pkg/sweep"
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "optimize" {
-		runOptimizer()
-		return
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "optimize":
+			runOptimizer()
+			return
+		case "sweep":
+			runSweep()
+			return
+		}
 	}
 
 	runLegacyFlags()
@@ -145,6 +152,39 @@ func runOptimizer() {
 
 	if *reportFile != "" {
 		writeReport(*reportFile, optimizer.GetHistory())
+	}
+}
+
+func runSweep() {
+	sweepCmd := flag.NewFlagSet("sweep", flag.ExitOnError)
+	configFile := sweepCmd.String("config", "jolt.yaml", "Path to configuration file")
+	reportFile := sweepCmd.String("report", "", "Write sweep results to JSON file")
+	sweepCmd.Parse(os.Args[2:])
+
+	cfg, err := config.Load(*configFile)
+	if err != nil {
+		fmt.Printf("Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	eng := engine.New(cfg.Settings.EngineType)
+	s := sweep.New(eng, cfg)
+
+	history, knee, err := s.Run()
+	if err != nil {
+		fmt.Printf("Sweep failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("\n>>> Sweep Complete <<<\n")
+	if knee.OriginalX != nil {
+		fmt.Printf("Knee found at: %v (IOPS: %.0f)\n", knee.OriginalX, knee.Y)
+	} else {
+		fmt.Println("Could not identify a distinct knee.")
+	}
+
+	if *reportFile != "" {
+		writeReport(*reportFile, history)
 	}
 }
 
