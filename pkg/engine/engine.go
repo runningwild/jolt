@@ -8,7 +8,6 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/HdrHistogram/hdrhistogram-go"
@@ -183,7 +182,7 @@ func (e *SyncEngine) runWorker(id int, params Params, tokens chan struct{}, done
 		flags = os.O_RDWR
 	}
 	if params.Direct {
-		flags |= syscall.O_DIRECT
+		flags |= O_DIRECT
 	}
 
 	f, err := os.OpenFile(params.Path, flags, 0666)
