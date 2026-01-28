@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/runningwild/jolt/pkg/config"
 	"github.com/runningwild/jolt/pkg/engine"
 	"github.com/runningwild/jolt/pkg/optimize"
@@ -14,126 +16,188 @@ import (
 )
 
 func main() {
+	// Dispatch subcommands
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "optimize":
-			runOptimizer()
+			runOptimizerCmd() // Explicit 'optimize' subcommand
 			return
 		case "sweep":
-			runSweep()
+			runSweepCmd() // Explicit 'sweep' subcommand
 			return
 		}
 	}
 
-	runLegacyFlags()
+	// Default behavior (flags -> optimize)
+	runDefaultOptimize()
 }
 
-func runLegacyFlags() {
-	// Flags
-	path := flag.String("path", "", "Path to device or file")
-	engineType := flag.String("engine", "sync", "I/O engine: 'sync' or 'uring'")
-	bs := flag.Int("bs", 4096, "Block size")
-	direct := flag.Bool("direct", true, "Use O_DIRECT")
-	readPct := flag.Int("read-pct", 100, "Read percentage (0-100)")
-	randIO := flag.Bool("rand", true, "Random I/O (default is sequential)")
-	
-	minRuntime := flag.Duration("min-runtime", 1*time.Second, "Minimum runtime for each test point")
-	maxRuntime := flag.Duration("max-runtime", 5*time.Second, "Maximum runtime for each test point")
-	errorTarget := flag.Float64("error", 0.05, "Target relative error (stdErr/mean), e.g., 0.05 for 5%")
+// Flags holds pointers to all supported CLI flags
+type Flags struct {
+	// Config File (optional)
+	ConfigFile *string
+	WriteConfig *string
+
+	// Legacy/Flag-based overrides
+	Path        *string
+	EngineType  *string
+	BS          *int
+	Direct      *bool
+	ReadPct     *int
+	RandIO      *bool
+	MinRuntime  *time.Duration
+	MaxRuntime  *time.Duration
+	ErrorTarget *float64
 
 	// Search Params
-	varName := flag.String("var", "workers", "Variable to optimize: 'workers', 'queue_depth', 'block_size'")
-	minVal := flag.Int("min", 1, "Minimum value for the variable")
-	maxVal := flag.Int("max", 32, "Maximum value for the variable")
-	stepVal := flag.Int("step", 1, "Step value for the variable")
+	VarName    *string
+	MinVal     *int
+	MaxVal     *int
+	StepVal    *int
+	Workers    *int
+	QueueDepth *int
+
+	// Reporting
+	ReportFile *string
+}
+
+func SetupFlags(fs *flag.FlagSet) *Flags {
+	f := &Flags{}
+	f.ConfigFile = fs.String("config", "", "Path to configuration file (disables other flags)")
+	f.WriteConfig = fs.String("write-config", "", "Save the generated configuration to this YAML file")
+
+	f.Path = fs.String("path", "", "Path to device or file")
+	f.EngineType = fs.String("engine", "sync", "I/O engine: 'sync' or 'uring'")
+	f.BS = fs.Int("bs", 4096, "Block size")
+	f.Direct = fs.Bool("direct", true, "Use O_DIRECT")
+	f.ReadPct = fs.Int("read-pct", 100, "Read percentage (0-100)")
+	f.RandIO = fs.Bool("rand", true, "Random I/O (default is sequential)")
 	
-	workers := flag.Int("workers", 1, "Fixed number of workers (when not optimizing workers)")
-	queueDepth := flag.Int("queue-depth", 1, "Fixed Global Queue Depth (when not optimizing queue_depth)")
-	reportFile := flag.String("report", "", "Write optimization history to JSON file")
+f.MinRuntime = fs.Duration("min-runtime", 1*time.Second, "Minimum runtime for each test point")
+	f.MaxRuntime = fs.Duration("max-runtime", 5*time.Second, "Maximum runtime for each test point")
+	f.ErrorTarget = fs.Float64("error", 0.05, "Target relative error (stdErr/mean), e.g., 0.05 for 5%")
 
-	flag.Parse()
+	f.VarName = fs.String("var", "workers", "Variable to optimize: 'workers', 'queue_depth', 'block_size'")
+	f.MinVal = fs.Int("min", 1, "Minimum value for the variable")
+	f.MaxVal = fs.Int("max", 32, "Maximum value for the variable")
+	f.StepVal = fs.Int("step", 1, "Step value for the variable")
+	
+f.Workers = fs.Int("workers", 1, "Fixed number of workers (when not optimizing workers)")
+f.QueueDepth = fs.Int("queue-depth", 1, "Fixed Global Queue Depth (when not optimizing queue_depth)")
+	
+f.ReportFile = fs.String("report", "", "Write results to JSON file")
+	return f
+}
 
-	if *path == "" {
-		fmt.Println("Error: -path is required")
-		flag.Usage()
-		os.Exit(1)
+// LoadConfig determines the config source (file or flags) and returns a Config object.
+func (f *Flags) LoadConfig() (*config.Config, error) {
+	// 1. If -config is provided, load it
+	if *f.ConfigFile != "" {
+		cfg, err := config.Load(*f.ConfigFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load config file: %w", err)
+		}
+		// Note: We currently don't allow overriding config file values with other flags.
+		return cfg, nil
 	}
 
-	// 1. Build Config from Flags
+	// 2. Build Config from Flags
+	if *f.Path == "" {
+		return nil, fmt.Errorf("-path is required when using flags")
+	}
+
 	cfg := &config.Config{
-		Target: *path,
+		Target: *f.Path,
 		Settings: config.Settings{
-			EngineType:  *engineType,
-			Direct:      *direct,
-			ReadPct:     *readPct,
-			Rand:        *randIO,
-			MinRuntime:  *minRuntime,
-			MaxRuntime:  *maxRuntime,
-			ErrorTarget: *errorTarget,
+			EngineType:  *f.EngineType,
+			Direct:      *f.Direct,
+			ReadPct:     *f.ReadPct,
+			Rand:        *f.RandIO,
+			MinRuntime:  *f.MinRuntime,
+			MaxRuntime:  *f.MaxRuntime,
+			ErrorTarget: *f.ErrorTarget,
 		},
 		Objectives: []config.Objective{
 			{Type: "maximize", Metric: "iops"},
 		},
 	}
 
-	// 2. Define the variable to search
+	// Define the variable to search
 	searchVar := config.Variable{
-		Name:  *varName,
-		Range: []int{*minVal, *maxVal},
-		Step:  *stepVal,
+		Name:  *f.VarName,
+		Range: []int{*f.MinVal, *f.MaxVal},
+		Step:  *f.StepVal,
 	}
 	cfg.Search = append(cfg.Search, searchVar)
 
-	// 3. Handle Fixed Values
-	if *varName != "workers" {
+	// Handle Fixed Values
+	if *f.VarName != "workers" {
 		cfg.Search = append(cfg.Search, config.Variable{
-			Name: "workers", Values: []int{*workers},
+			Name: "workers", Values: []int{*f.Workers},
 		})
 	}
-	if *varName != "queue_depth" {
+	if *f.VarName != "queue_depth" {
 		cfg.Search = append(cfg.Search, config.Variable{
-			Name: "queue_depth", Values: []int{*queueDepth},
+			Name: "queue_depth", Values: []int{*f.QueueDepth},
 		})
 	}
-	if *varName != "block_size" {
+	if *f.VarName != "block_size" {
 		cfg.Search = append(cfg.Search, config.Variable{
-			Name: "block_size", Values: []int{*bs},
+			Name: "block_size", Values: []int{*f.BS},
 		})
 	}
 
-
-	fmt.Printf("Starting jolt optimization on %s varying %s...\n", *path, *varName)
-	
-	// 4. Run Optimization
-	eng := engine.New(cfg.Settings.EngineType)
-	optimizer := optimize.NewCoordinate(eng, cfg)
-	
-	bestState, bestRes, err := optimizer.Optimize()
-	if err != nil {
-		fmt.Printf("Optimization failed: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("\n>>> Optimization Complete <<<\n")
-	fmt.Printf("Best State: %v\n", bestState)
-	fmt.Printf("Metrics:    IOPS=%.0f, Throughput=%.2f MB/s\n", bestRes.IOPS, bestRes.Throughput/1024/1024)
-
-	if *reportFile != "" {
-		writeReport(*reportFile, optimizer.GetHistory())
-	}
+	return cfg, nil
 }
 
-func runOptimizer() {
-	optimizeCmd := flag.NewFlagSet("optimize", flag.ExitOnError)
-	configFile := optimizeCmd.String("config", "jolt.yaml", "Path to configuration file")
-	reportFile := optimizeCmd.String("report", "", "Write optimization history to JSON file")
-	optimizeCmd.Parse(os.Args[2:])
-
-	cfg, err := config.Load(*configFile)
+func (f *Flags) MaybeWriteConfig(cfg *config.Config) {
+	if *f.WriteConfig == "" {
+		return
+	}
+	// Marshal to YAML
+	data, err := yaml.Marshal(cfg)
 	if err != nil {
-		fmt.Printf("Failed to load config: %v\n", err)
+		fmt.Printf("Warning: Failed to marshal config for writing: %v\n", err)
+		return
+	}
+	if err := os.WriteFile(*f.WriteConfig, data, 0644); err != nil {
+		fmt.Printf("Warning: Failed to write config file: %v\n", err)
+		return
+	}
+	fmt.Printf("Configuration written to %s\n", *f.WriteConfig)
+}
+
+// runDefaultOptimize handles "jolt [flags]"
+func runDefaultOptimize() {
+	f := SetupFlags(flag.CommandLine)
+	flag.Parse()
+
+	if *f.ConfigFile == "" && *f.Path == "" {
+		// If neither config nor path is provided, print help
+		flag.Usage()
 		os.Exit(1)
 	}
+
+	runOptimizeLogic(f)
+}
+
+// runOptimizerCmd handles "jolt optimize [flags]"
+func runOptimizerCmd() {
+	fs := flag.NewFlagSet("optimize", flag.ExitOnError)
+	f := SetupFlags(fs)
+	fs.Parse(os.Args[2:])
+	
+	runOptimizeLogic(f)
+}
+
+func runOptimizeLogic(f *Flags) {
+	cfg, err := f.LoadConfig()
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	f.MaybeWriteConfig(cfg)
 
 	fmt.Printf("Optimizing %s using Coordinate Descent...\n", cfg.Target)
 	
@@ -150,22 +214,24 @@ func runOptimizer() {
 	fmt.Printf("Best State: %v\n", bestState)
 	fmt.Printf("Metrics:    IOPS=%.0f, Throughput=%.2f MB/s\n", bestRes.IOPS, bestRes.Throughput/1024/1024)
 
-	if *reportFile != "" {
-		writeReport(*reportFile, optimizer.GetHistory())
+	if *f.ReportFile != "" {
+		writeReport(*f.ReportFile, optimizer.GetHistory())
 	}
 }
 
-func runSweep() {
-	sweepCmd := flag.NewFlagSet("sweep", flag.ExitOnError)
-	configFile := sweepCmd.String("config", "jolt.yaml", "Path to configuration file")
-	reportFile := sweepCmd.String("report", "", "Write sweep results to JSON file")
-	sweepCmd.Parse(os.Args[2:])
+// runSweepCmd handles "jolt sweep [flags]"
+func runSweepCmd() {
+	fs := flag.NewFlagSet("sweep", flag.ExitOnError)
+	f := SetupFlags(fs)
+	fs.Parse(os.Args[2:])
 
-	cfg, err := config.Load(*configFile)
+	cfg, err := f.LoadConfig()
 	if err != nil {
-		fmt.Printf("Failed to load config: %v\n", err)
+		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
+
+	f.MaybeWriteConfig(cfg)
 
 	eng := engine.New(cfg.Settings.EngineType)
 	s := sweep.New(eng, cfg)
@@ -183,8 +249,8 @@ func runSweep() {
 		fmt.Println("Could not identify a distinct knee.")
 	}
 
-	if *reportFile != "" {
-		writeReport(*reportFile, history)
+	if *f.ReportFile != "" {
+		writeReport(*f.ReportFile, history)
 	}
 }
 
