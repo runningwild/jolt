@@ -115,6 +115,9 @@ func (f *Flags) LoadConfig() (*config.Config, error) {
 		return nil, fmt.Errorf("-path is required when using flags")
 	}
 
+	// Normalize variable name (allow queue-depth to match queue_depth)
+	normalizedVar := strings.ReplaceAll(*f.VarName, "-", "_")
+
 	cfg := &config.Config{
 		Target: *f.Path,
 		Settings: config.Settings{
@@ -133,24 +136,24 @@ func (f *Flags) LoadConfig() (*config.Config, error) {
 
 	// Define the variable to search
 	searchVar := config.Variable{
-		Name:  *f.VarName,
+		Name:  normalizedVar,
 		Range: []int{*f.MinVal, *f.MaxVal},
 		Step:  *f.StepVal,
 	}
 	cfg.Search = append(cfg.Search, searchVar)
 
 	// Handle Fixed Values
-	if *f.VarName != "workers" {
+	if normalizedVar != "workers" {
 		cfg.Search = append(cfg.Search, config.Variable{
 			Name: "workers", Values: []int{*f.Workers},
 		})
 	}
-	if *f.VarName != "queue_depth" {
+	if normalizedVar != "queue_depth" {
 		cfg.Search = append(cfg.Search, config.Variable{
 			Name: "queue_depth", Values: []int{*f.QueueDepth},
 		})
 	}
-	if *f.VarName != "block_size" {
+	if normalizedVar != "block_size" {
 		cfg.Search = append(cfg.Search, config.Variable{
 			Name: "block_size", Values: []int{*f.BS},
 		})

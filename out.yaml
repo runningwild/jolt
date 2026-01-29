@@ -1,0 +1,29 @@
+target: /dev/nvme0n1p3
+search:
+    - variable: queue-depth
+      range:
+        - 1
+        - 32
+      step: 1
+    - variable: workers
+      values:
+        - 25
+    - variable: queue_depth
+      values:
+        - 1
+    - variable: block_size
+      values:
+        - 4096
+objectives:
+    - type: maximize
+      metric: iops
+optimizer: ""
+settings:
+    engine_type: uring
+    direct: true
+    read_pct: 100
+    write: false
+    rand: true
+    min_runtime: 1s
+    max_runtime: 5s
+    error_target: 0.05
