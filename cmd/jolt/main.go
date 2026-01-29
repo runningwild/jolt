@@ -76,7 +76,7 @@ func SetupFlags(fs *flag.FlagSet) *Flags {
 	f.WriteConfig = fs.String("write-config", "", "Save the generated configuration to this YAML file")
 
 	f.Path = fs.String("path", "", "Path to device or file")
-	f.EngineType = fs.String("engine", "sync", "I/O engine: 'sync' or 'uring'")
+	f.EngineType = fs.String("engine", "sync", "I/O engine: 'sync', 'uring', or 'libaio'")
 	f.BS = fs.Int("bs", 4096, "Block size")
 	f.Direct = fs.Bool("direct", true, "Use O_DIRECT")
 			f.ReadPct = fs.Int("read-pct", 100, "Read percentage (0-100)")

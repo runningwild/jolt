@@ -29,6 +29,8 @@ func New(engineType string) Engine {
 	switch engineType {
 	case "uring":
 		return NewUring()
+	case "libaio":
+		return NewLibAIO()
 	default:
 		return NewSync()
 	}
