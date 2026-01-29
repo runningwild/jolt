@@ -6,20 +6,37 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"os/exec"
 	"sync"
 	"time"
 
 	"github.com/runningwild/jolt/pkg/engine"
+	"github.com/runningwild/jolt/pkg/fio"
 )
 
-type ClusterEngine struct {
-	nodes []string
+type RemoteNode interface {
+	Run(params engine.Params) (*engine.Result, error)
+	Name() string
 }
 
-func New(nodes []string) *ClusterEngine {
-	return &ClusterEngine{
-		nodes: nodes,
+type ClusterEngine struct {
+	nodes []RemoteNode
+}
+
+func New(joltNodes []string, fioNodes []string) *ClusterEngine {
+	ce := &ClusterEngine{}
+	for _, host := range joltNodes {
+		if host != "" {
+			ce.nodes = append(ce.nodes, &JoltAgentNode{host: host})
+		}
 	}
+	for _, host := range fioNodes {
+		if host != "" {
+			ce.nodes = append(ce.nodes, &FioServerNode{host: host})
+		}
+	}
+	return ce
 }
 
 func (c *ClusterEngine) NumNodes() int { return len(c.nodes) }
@@ -55,23 +72,20 @@ func (c *ClusterEngine) Run(params engine.Params) (*engine.Result, error) {
 				nodeParams.QueueDepth = baseQD
 			}
 
-			// If distributed QD is 0, DO NOT RUN this node.
-			// Otherwise the engine will default QD = Workers, causing huge phantom load.
 			if nodeParams.QueueDepth == 0 {
 				wg.Done() // Skip
 				continue
 			}
 		}
 
-		// If distributed Workers is 0, DO NOT RUN this node.
 		if nodeParams.Workers == 0 {
 			wg.Done() // Skip
 			continue
 		}
 
-		go func(idx int, host string, p engine.Params) {
+		go func(idx int, n RemoteNode, p engine.Params) {
 			defer wg.Done()
-			res, err := c.runRemote(host, p)
+			res, err := n.Run(p)
 			results[idx] = res
 			errors[idx] = err
 		}(i, node, nodeParams)
@@ -81,48 +95,11 @@ func (c *ClusterEngine) Run(params engine.Params) (*engine.Result, error) {
 	// Check errors
 	for i, err := range errors {
 		if err != nil {
-			return nil, fmt.Errorf("node %s failed: %v", c.nodes[i], err)
+			return nil, fmt.Errorf("node %s failed: %v", c.nodes[i].Name(), err)
 		}
 	}
 
 	return c.aggregate(results), nil
-}
-
-func (c *ClusterEngine) runRemote(host string, params engine.Params) (*engine.Result, error) {
-	url := fmt.Sprintf("http://%s/run", host)
-	
-	data, err := json.Marshal(params)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	// Timeout should be MaxRuntime + Buffer
-	timeout := params.MaxRuntime + 5*time.Second
-	if timeout < 10*time.Second { timeout = 10 * time.Second }
-	client := &http.Client{Timeout: timeout}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("agent %s error (%s): %s", host, resp.Status, string(bytes.TrimSpace(body)))
-	}
-
-	var res engine.Result
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return nil, err
-	}
-	return &res, nil
 }
 
 func (c *ClusterEngine) aggregate(results []*engine.Result) *engine.Result {
@@ -142,9 +119,8 @@ func (c *ClusterEngine) aggregate(results []*engine.Result) *engine.Result {
 		if r.MetricConfidence > agg.MetricConfidence {
 			agg.MetricConfidence = r.MetricConfidence
 		}
-		agg.TerminationReason = r.TerminationReason // Last one wins?
+		agg.TerminationReason = r.TerminationReason
 
-		// Weighted aggregation for latencies
 		weight := float64(r.TotalIOs)
 		totalWeight += weight
 		
@@ -164,4 +140,85 @@ func (c *ClusterEngine) aggregate(results []*engine.Result) *engine.Result {
 	}
 
 	return agg
+}
+
+// --- Jolt Agent Node ---
+
+type JoltAgentNode struct {
+	host string
+}
+
+func (n *JoltAgentNode) Name() string { return n.host }
+
+func (n *JoltAgentNode) Run(params engine.Params) (*engine.Result, error) {
+	url := fmt.Sprintf("http://%s/run", n.host)
+	
+	data, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	timeout := params.MaxRuntime + 5*time.Second
+	if timeout < 10*time.Second { timeout = 10 * time.Second }
+	client := &http.Client{Timeout: timeout}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("status %s: %s", resp.Status, string(bytes.TrimSpace(body)))
+	}
+
+	var res engine.Result
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// --- FIO Server Node ---
+
+type FioServerNode struct {
+	host string
+}
+
+func (n *FioServerNode) Name() string { return "fio@" + n.host }
+
+func (n *FioServerNode) Run(params engine.Params) (*engine.Result, error) {
+	jobContent := fio.GenerateJob(params)
+	
+	tmpFile, err := os.CreateTemp("", "jolt_fio_*.fio")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp job file: %v", err)
+	}
+	jobPath := tmpFile.Name()
+	defer os.Remove(jobPath)
+	
+	if _, err := tmpFile.WriteString(jobContent); err != nil {
+		return nil, fmt.Errorf("failed to write job file: %v", err)
+	}
+	tmpFile.Close()
+
+	// Run FIO
+	// Requires 'fio' binary in PATH
+	cmd := exec.Command("fio", fmt.Sprintf("--client=%s", n.host), "--output-format=json", jobPath)
+	out, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("fio failed: %s", string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("fio execution failed: %v", err)
+	}
+
+	return fio.ParseOutput(out, params.MaxRuntime)
 }

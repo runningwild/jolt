@@ -367,121 +367,239 @@ func runSweepLogic(f *Flags, cfg *config.Config, eng engine.Engine) {
 
 
 
-// runRemoteCmd handles "jolt remote [optimize|sweep] -nodes ..."
+// runRemoteCmd handles "jolt remote [optimize|sweep] ..."
+
+
 
 func runRemoteCmd() {
 
+
+
 	if len(os.Args) < 3 {
 
-		fmt.Println("Usage: jolt remote <command> -nodes <host1,host2> [flags]")
+
+
+		fmt.Println("Usage: jolt remote <command> [flags]")
+
+
 
 		os.Exit(1)
 
+
+
 	}
+
+
 
 	subCmd := os.Args[2]
 
+
+
 	
+
+
 
 	fs := flag.NewFlagSet("remote "+subCmd, flag.ExitOnError)
 
+
+
 	f := SetupFlags(fs)
 
-	nodesFlag := fs.String("nodes", "", "Comma-separated list of agent nodes (e.g. host1:9000,host2:9000)")
+
+
+	nodesFlag := fs.String("nodes", "", "Alias for -jolt-nodes (deprecated)")
+
+
+
+	joltNodesFlag := fs.String("jolt-nodes", "", "Comma-separated list of jolt agent nodes (e.g. host1:9000)")
+
+
+
+	fioNodesFlag := fs.String("fio-nodes", "", "Comma-separated list of fio server nodes (e.g. host1)")
+
+
 
 	fs.Parse(os.Args[3:])
 
-	
 
-		if *nodesFlag == "" {
 
 	
 
-			fmt.Println("Error: -nodes is required for remote mode")
 
-	
 
-			os.Exit(1)
+	joltNodes := []string{}
 
-	
 
-		}
 
-	
+	if *joltNodesFlag != "" {
 
-		
 
-	
 
-		// In remote mode, path might be handled by agents. Inject dummy if missing to satisfy Config validation.
+		joltNodes = strings.Split(*joltNodesFlag, ",")
 
-	
 
-		if *f.Path == "" && *f.ConfigFile == "" {
 
-	
+	} else if *nodesFlag != "" {
 
-			dummy := "REMOTE_MANAGED"
 
-	
 
-			f.Path = &dummy
+		joltNodes = strings.Split(*nodesFlag, ",")
 
-	
 
-		}
 
-	
+	}
 
-	
 
-	
 
-		cfg, err := f.LoadConfig()
 
-	
 
-	
 
-	if err != nil {
 
-		fmt.Printf("Error: %v\n", err)
+	fioNodes := []string{}
+
+
+
+	if *fioNodesFlag != "" {
+
+
+
+		fioNodes = strings.Split(*fioNodesFlag, ",")
+
+
+
+	}
+
+
+
+
+
+
+
+	if len(joltNodes) == 0 && len(fioNodes) == 0 {
+
+
+
+		fmt.Println("Error: at least one of -jolt-nodes or -fio-nodes is required")
+
+
 
 		os.Exit(1)
 
+
+
 	}
+
+
+
+	
+
+
+
+	// In remote mode, path might be handled by agents. Inject dummy if missing to satisfy Config validation.
+
+
+
+	if *f.Path == "" && *f.ConfigFile == "" {
+
+
+
+		dummy := "REMOTE_MANAGED"
+
+
+
+		f.Path = &dummy
+
+
+
+	}
+
+
+
+
+
+
+
+	cfg, err := f.LoadConfig()
+
+
+
+	if err != nil {
+
+
+
+		fmt.Printf("Error: %v\n", err)
+
+
+
+		os.Exit(1)
+
+
+
+	}
+
+
 
 	f.MaybeWriteConfig(cfg)
 
-	
 
-	nodes := strings.Split(*nodesFlag, ",")
-
-	fmt.Printf("Initializing Cluster Engine with %d nodes...\n", len(nodes))
-
-	eng := cluster.New(nodes)
 
 	
+
+
+
+	fmt.Printf("Initializing Cluster Engine with %d Jolt nodes and %d FIO nodes...\n", len(joltNodes), len(fioNodes))
+
+
+
+	eng := cluster.New(joltNodes, fioNodes)
+
+
+
+	
+
+
 
 	switch subCmd {
 
+
+
 	case "optimize":
+
+
 
 		runOptimizeLogic(f, cfg, eng)
 
+
+
 	case "sweep":
+
+
 
 		runSweepLogic(f, cfg, eng)
 
+
+
 	default:
+
+
 
 		fmt.Printf("Unknown remote command '%s'. Use 'optimize' or 'sweep'.\n", subCmd)
 
+
+
         os.Exit(1)
+
+
 
 	}
 
+
+
 }
+
+
+
+
 
 
 
