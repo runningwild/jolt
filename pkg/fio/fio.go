@@ -99,7 +99,8 @@ func GenerateJob(p engine.Params) string {
 
 // Structures for parsing FIO JSON output
 type FioOutput struct {
-	Jobs []FioJob `json:"jobs"`
+	Jobs        []FioJob `json:"jobs"`
+	ClientStats []FioJob `json:"client_stats"`
 }
 
 type FioJob struct {
@@ -124,6 +125,11 @@ func ParseOutput(jsonData []byte, duration time.Duration) (*engine.Result, error
 		return nil, err
 	}
 
+	jobs := out.Jobs
+	if len(jobs) == 0 {
+		jobs = out.ClientStats
+	}
+
 	res := &engine.Result{
 		Duration: duration,
 	}
@@ -146,7 +152,7 @@ func ParseOutput(jsonData []byte, duration time.Duration) (*engine.Result, error
 		return 0
 	}
 
-	for _, j := range out.Jobs {
+	for _, j := range jobs {
 		totalReadIOs += j.Read.TotalIOS
 		totalWriteIOs += j.Write.TotalIOS
 		
