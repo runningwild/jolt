@@ -217,9 +217,15 @@ func (e *SyncEngine) runWorker(id int, params Params, tokens chan struct{}, done
 	
 	r := rand.New(rand.NewSource(time.Now().UnixNano() + int64(id)))
 
+	var traceSpans []Span
+	const traceBatchSize = 1000
+
 	for {
 		select {
 		case <-done:
+			if params.TraceChannel != nil && len(traceSpans) > 0 {
+				params.TraceChannel <- TraceMsg{WorkerID: id, Spans: traceSpans, MinStart: math.MaxInt64}
+			}
 			return workerResult{ioCount: ioCount, hist: hist}
 		case <-tokens:
 			// Acquired token
@@ -247,11 +253,20 @@ func (e *SyncEngine) runWorker(id int, params Params, tokens chan struct{}, done
 		} else {
 			n, err = f.WriteAt(alignedBlock, offset)
 		}
+		ioEnd := time.Now()
 		
 		// Release token
 		tokens <- struct{}{}
 		
 		_ = hist.RecordValue(time.Since(ioStart).Microseconds())
+
+		if params.TraceChannel != nil {
+			traceSpans = append(traceSpans, Span{Start: ioStart.UnixNano(), End: ioEnd.UnixNano()})
+			if len(traceSpans) >= traceBatchSize {
+				params.TraceChannel <- TraceMsg{WorkerID: id, Spans: traceSpans, MinStart: ioEnd.UnixNano()}
+				traceSpans = nil
+			}
+		}
 		
 		if err != nil && err != io.EOF {
 			return workerResult{err: err}

@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"os"
 	"sync"
@@ -224,6 +225,9 @@ func (e *LibAIOEngine) runAIOWorker(id int, params Params, qd int, done chan str
 	iocbs := make([]iocb, qd)
 	iocbPtrs := make([]*iocb, qd)
 
+	var traceSpans []Span
+	const traceBatchSize = 1000
+
 	for {
 		submitCount := 0
 		// Fill slots
@@ -296,18 +300,43 @@ func (e *LibAIOEngine) runAIOWorker(id int, params Params, qd int, done chan str
 					return workerResult{err: fmt.Errorf("aio IO error: %v", evt.Res)}
 				}
 
-				_ = hist.RecordValue(time.Since(startTimes[slotIdx]).Microseconds())
+				ioEnd := time.Now()
+				ioStart := startTimes[slotIdx]
+				startTimes[slotIdx] = time.Time{}
+
+				_ = hist.RecordValue(ioEnd.Sub(ioStart).Microseconds())
 				ioCount++
 				atomic.AddInt64(opsCounter, 1)
 				inFlight--
 
 				freeSlots[nextFreeIdx] = slotIdx
 				nextFreeIdx++
+
+				if params.TraceChannel != nil {
+					traceSpans = append(traceSpans, Span{Start: ioStart.UnixNano(), End: ioEnd.UnixNano()})
+				}
+			}
+
+			if params.TraceChannel != nil && len(traceSpans) >= traceBatchSize {
+				minStart := int64(math.MaxInt64)
+				for k := 0; k < qd; k++ {
+					if !startTimes[k].IsZero() {
+						ts := startTimes[k].UnixNano()
+						if ts < minStart {
+							minStart = ts
+						}
+					}
+				}
+				params.TraceChannel <- TraceMsg{WorkerID: id, Spans: traceSpans, MinStart: minStart}
+				traceSpans = nil
 			}
 		}
 
 		select {
 		case <-done:
+			if params.TraceChannel != nil && len(traceSpans) > 0 {
+				params.TraceChannel <- TraceMsg{WorkerID: id, Spans: traceSpans, MinStart: math.MaxInt64}
+			}
 			return workerResult{ioCount: ioCount, hist: hist}
 		default:
 		}

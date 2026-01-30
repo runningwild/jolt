@@ -25,6 +25,17 @@ type Engine interface {
 	NumNodes() int
 }
 
+type Span struct {
+	Start int64
+	End   int64
+}
+
+type TraceMsg struct {
+	WorkerID int
+	Spans    []Span
+	MinStart int64
+}
+
 // Params defines the parameters for an I/O workload.
 type Params struct {
 	EngineType string        // "sync" or "uring"
@@ -39,6 +50,8 @@ type Params struct {
 	MaxRuntime time.Duration // Maximum time to run the test
 	ErrorTarget float64      `json:"error_target"`      // Target standard error / mean (e.g. 0.01 for 1%)
 	
+	TraceChannel chan TraceMsg `json:"-"`
+
 	// Optional callback for real-time progress updates
 	Progress func(Result) `json:"-"`
 }

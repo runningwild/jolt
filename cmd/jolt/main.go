@@ -28,6 +28,9 @@ func main() {
 		case "sweep":
 			runSweepCmd() // Explicit 'sweep' subcommand
 			return
+		case "sustain":
+			runSustainCmd()
+			return
 		case "agent":
 			runAgentCmd()
 			return

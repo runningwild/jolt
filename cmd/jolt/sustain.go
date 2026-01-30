@@ -1,0 +1,126 @@
+package main
+
+import (
+	"encoding/csv"
+		"flag"
+		"fmt"
+		"os"
+		"time"
+	
+		"github.com/runningwild/jolt/pkg/analyze"
+	
+	"github.com/runningwild/jolt/pkg/engine"
+)
+
+// runSustainCmd handles "jolt sustain [flags]"
+func runSustainCmd() {
+	fs := flag.NewFlagSet("sustain", flag.ExitOnError)
+	f := SetupFlags(fs)
+	durFlag := fs.Duration("duration", 60*time.Second, "Duration to run")
+	outFlag := fs.String("output", "stability.csv", "Output CSV file")
+
+	fs.Parse(os.Args[2:])
+
+	cfg, err := f.LoadConfig()
+	if err != nil {
+		fmt.Printf("Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Construct Params
+	params := engine.Params{
+		EngineType: cfg.Settings.EngineType,
+		Path:       cfg.Target,
+		Direct:     cfg.Settings.Direct,
+		ReadPct:    cfg.Settings.ReadPct,
+		Rand:       cfg.Settings.Rand,
+		MinRuntime: *durFlag,
+		MaxRuntime: *durFlag,
+	}
+
+	// Resolve Variables from Config (taking first value/min of range if not overridden by flags)
+	// Flags are already merged into Config by LoadConfig logic? 
+	// LoadConfig uses f.VarName overrides but puts them into Search.
+	// We need to extract them.
+	
+	// Helper to get value
+	getValue := func(name string, def int) int {
+		for _, v := range cfg.Search {
+			if v.Name == name {
+				if len(v.Values) > 0 { return v.Values[0] }
+				if len(v.Range) > 0 { return v.Range[0] }
+			}
+		}
+		return def
+	}
+
+	params.Workers = getValue("workers", 1)
+	params.QueueDepth = getValue("queue_depth", 1)
+	params.BlockSize = getValue("block_size", 4096)
+
+	fmt.Printf("Running Sustain Analysis for %s...\n", *durFlag)
+	fmt.Printf("Configuration: Workers=%d, QD=%d, BS=%d, Engine=%s\n", params.Workers, params.QueueDepth, params.BlockSize, params.EngineType)
+
+	// Analyzer setup
+	traceCh := make(chan engine.TraceMsg, 1024)
+	analyzer := analyze.NewSustainAnalyzer(traceCh, params.Workers)
+	
+	doneCh := make(chan struct{})
+	go func() {
+		analyzer.Run()
+		close(doneCh)
+	}()
+
+	params.TraceChannel = traceCh
+	params.Progress = func(r engine.Result) {
+		fmt.Printf("\rElapsed: %v | IOPS: %.0f | Conf: %.4f", r.Duration.Round(time.Second), r.IOPS, r.MetricConfidence)
+	}
+
+	eng := engine.New(params.EngineType)
+	res, err := eng.Run(params)
+	
+	fmt.Println() // Newline after progress
+	
+	close(traceCh) // Signal analyzer to finish
+	
+	if err != nil {
+		fmt.Printf("Run failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Waiting for analysis to complete...")
+	<-doneCh
+
+	points := analyzer.GetProfile()
+	if err := writeStabilityCSV(*outFlag, points); err != nil {
+		fmt.Printf("Failed to write output: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Stability profile written to %s\n", *outFlag)
+	fmt.Printf("Average IOPS: %.0f\n", res.IOPS)
+}
+
+func writeStabilityCSV(path string, points []analyze.Point) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	w := csv.NewWriter(f)
+	defer w.Flush()
+
+	if err := w.Write([]string{"Duration_Seconds", "Min_IOPS"}); err != nil {
+		return err
+	}
+
+	for _, p := range points {
+		if err := w.Write([]string{
+			fmt.Sprintf("%.4f", p.X),
+			fmt.Sprintf("%.2f", p.Y),
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
