@@ -17,6 +17,7 @@ func runSustainCmd() {
 	fs := flag.NewFlagSet("sustain", flag.ExitOnError)
 	f := SetupFlags(fs)
 	durFlag := fs.Duration("duration", 60*time.Second, "Duration to run")
+	resFlag := fs.Duration("resolution", 1*time.Millisecond, "Time resolution for output (bin size)")
 	outFlag := fs.String("output", "stability.csv", "Output CSV file")
 
 	fs.Parse(os.Args[2:])
@@ -54,9 +55,15 @@ func runSustainCmd() {
 		return def
 	}
 
-	params.Workers = getValue("workers", 1)
-	params.QueueDepth = getValue("queue_depth", 1)
-	params.BlockSize = getValue("block_size", 4096)
+	if *f.ConfigFile == "" {
+		params.Workers = *f.Workers
+		params.QueueDepth = *f.QueueDepth
+		params.BlockSize = *f.BS
+	} else {
+		params.Workers = getValue("workers", 1)
+		params.QueueDepth = getValue("queue_depth", 1)
+		params.BlockSize = getValue("block_size", 4096)
+	}
 
 	fmt.Printf("Running Sustain Analysis for %s...\n", *durFlag)
 	fmt.Printf("Configuration: Workers=%d, QD=%d, BS=%d, Engine=%s\n", params.Workers, params.QueueDepth, params.BlockSize, params.EngineType)
@@ -92,12 +99,60 @@ func runSustainCmd() {
 	<-doneCh
 
 	points := analyzer.GetProfile()
-	if err := writeStabilityCSV(*outFlag, points); err != nil {
+	if len(points) > 0 {
+		points = points[:len(points)-1]
+	}
+	
+	finalPoints := downsamplePoints(points, *resFlag)
+
+	if err := writeStabilityCSV(*outFlag, finalPoints); err != nil {
 		fmt.Printf("Failed to write output: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("Stability profile written to %s\n", *outFlag)
 	fmt.Printf("Average IOPS: %.0f\n", res.IOPS)
+}
+
+func downsamplePoints(points []analyze.Point, resolution time.Duration) []analyze.Point {
+	if resolution <= 0 || len(points) == 0 {
+		return points
+	}
+
+	resSec := resolution.Seconds()
+	var result []analyze.Point
+
+	var currentBin int64 = -1
+	var sumY float64
+	var count int
+
+	for _, p := range points {
+		bin := int64(p.X / resSec)
+
+		if bin != currentBin {
+			if count > 0 {
+				avgY := sumY / float64(count)
+				result = append(result, analyze.Point{
+					X: float64(currentBin+1) * resSec,
+					Y: avgY,
+				})
+			}
+			currentBin = bin
+			sumY = 0
+			count = 0
+		}
+		sumY += p.Y
+		count++
+	}
+
+	if count > 0 {
+		avgY := sumY / float64(count)
+		result = append(result, analyze.Point{
+			X: float64(currentBin+1) * resSec,
+			Y: avgY,
+		})
+	}
+
+	return result
 }
 
 func writeStabilityCSV(path string, points []analyze.Point) error {
