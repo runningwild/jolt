@@ -18,6 +18,7 @@ func runSustainCmd() {
 	f := SetupFlags(fs)
 	durFlag := fs.Duration("duration", 60*time.Second, "Duration to run")
 	resFlag := fs.Duration("resolution", 1*time.Millisecond, "Time resolution for output (bin size)")
+	tolFlag := fs.Float64("tolerance", 0.05, "Relative error tolerance for linearity analysis (e.g. 0.05 for 5%)")
 	outFlag := fs.String("output", "stability.csv", "Output CSV file")
 
 	fs.Parse(os.Args[2:])
@@ -111,6 +112,13 @@ func runSustainCmd() {
 	}
 	fmt.Printf("Stability profile written to %s\n", *outFlag)
 	fmt.Printf("Average IOPS: %.0f\n", res.IOPS)
+
+	if len(finalPoints) > 2 {
+		linear := analyze.FindDominantSlope(finalPoints, *tolFlag)
+		fmt.Println("\n>>> Stability Analysis <<<")
+		fmt.Printf("Linear Region: %.1f%% of the graph (%.2fs - %.2fs)\n", linear.Coverage*100, linear.StartX, linear.EndX)
+		fmt.Printf("Slope:         %.4f IOPS/s (Closer to 0 is better)\n", linear.Slope)
+	}
 }
 
 func downsamplePoints(points []analyze.Point, resolution time.Duration) []analyze.Point {
