@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/csv"
-		"flag"
-		"fmt"
-		"os"
+			"flag"
+			"fmt"
+			"math"
+			"os"
+		
 		"time"
 	
 		"github.com/runningwild/jolt/pkg/analyze"
@@ -115,9 +117,21 @@ func runSustainCmd() {
 
 	if len(finalPoints) > 2 {
 		linear := analyze.FindDominantSlope(finalPoints, *tolFlag)
+		dur := linear.EndX - linear.StartX
+		variation := math.Abs(linear.Slope * dur)
+
+		// Estimate mean IOPS in region
+		midX := (linear.StartX + linear.EndX) / 2
+		meanIOPS := linear.Intercept + linear.Slope*midX
+		relVar := 0.0
+		if meanIOPS > 0 {
+			relVar = (variation / meanIOPS) * 100
+		}
+
 		fmt.Println("\n>>> Stability Analysis <<<")
 		fmt.Printf("Linear Region: %.1f%% of the graph (%.2fs - %.2fs)\n", linear.Coverage*100, linear.StartX, linear.EndX)
-		fmt.Printf("Slope:         %.4f IOPS/s (Closer to 0 is better)\n", linear.Slope)
+		fmt.Printf("Slope:         %.4f IOPS/s\n", linear.Slope)
+		fmt.Printf("Variation:     %.2f IOPS (%.2f%%) over %.2fs\n", variation, relVar, dur)
 	}
 }
 
