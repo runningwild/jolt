@@ -102,23 +102,38 @@ func (e *SyncEngine) Run(params Params) (*Result, error) {
 			lastTime = now
 
 			// Calculate intermediate stats
-			var mean, stdErr float64
-			if len(iopsSamples) > 0 {
-				mean, stdErr = calculateStats(iopsSamples)
-			}
+						var mean, stdErr float64
+						if len(iopsSamples) > 0 {
+							mean, stdErr = calculateStats(iopsSamples)
+						}
+						if mean > 0 {
+							finalRelErr = stdErr / mean
+						}
 			
-			if mean > 0 {
-				finalRelErr = stdErr / mean
-			}
-
-			if params.Progress != nil {
-				params.Progress(Result{
-					IOPS:             mean,
-					MetricConfidence: finalRelErr,
-					Duration:         elapsed,
-					TotalIOs:         currOps,
-				})
-			}
+						// Calculate Instantaneous IOPS (Last 10 samples = 1 second) for display
+						var instantIOPS float64
+						window := 10
+						if len(iopsSamples) == 0 {
+							instantIOPS = 0
+						} else if len(iopsSamples) < window {
+							instantIOPS = mean
+						} else {
+							sum := 0.0
+							for k := 0; k < window; k++ {
+								sum += iopsSamples[len(iopsSamples)-1-k]
+							}
+							instantIOPS = sum / float64(window)
+						}
+			
+						if params.Progress != nil {
+							params.Progress(Result{
+								IOPS:             instantIOPS,
+								MetricConfidence: finalRelErr,
+								Duration:         elapsed,
+								TotalIOs:         currOps,
+							})
+						}
+			
 
 			// Check termination conditions
 			if elapsed > params.MinRuntime {
