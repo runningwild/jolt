@@ -16,6 +16,8 @@ func (m *mockEngine) Run(params engine.Params) (*engine.Result, error) {
 	return m.runFunc(params)
 }
 
+func (m *mockEngine) NumNodes() int { return 1 }
+
 func TestEvaluator_Scoring(t *testing.T) {
 	cfg := &config.Config{
 		Objectives: []config.Objective{

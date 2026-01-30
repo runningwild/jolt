@@ -122,6 +122,11 @@ func (a *SustainAnalyzer) processEventsUntil(limit int64) {
 		}
 		heap.Pop(&a.eventPQ)
 
+		if !a.initialized {
+			a.lastTime = evt.Time
+			a.initialized = true
+		}
+
 		// Advance time
 		if evt.Time > a.lastTime {
 			delta := evt.Time - a.lastTime
